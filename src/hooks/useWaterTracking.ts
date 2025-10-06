@@ -17,6 +17,7 @@ import {
   fetchHydrationStatsFromBackend,
   logHydrationToBackend,
   mapBackendStatsToUserStats,
+  removeHydrationLogFromBackend,
   syncGoalToBackend,
 } from '@/lib/backend';
 import { resolveDrinkLabel } from '@/lib/api';
@@ -26,6 +27,7 @@ export function useWaterTracking() {
   const [stats, setStats] = useState<UserStats>(getUserStats());
   const [goal, setGoal] = useState(getDailyGoal());
   const [recordsByDate, setRecordsByDate] = useState<Record<string, DayRecord>>({});
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadLocalTodayRecord = useCallback(() => {
     const today = getTodayKey();
@@ -46,9 +48,14 @@ export function useWaterTracking() {
     setGoal(record.goal);
   }, []);
 
-  const refreshBackendData = useCallback(async () => {
+  const refreshBackendData = useCallback(async (skipLoadingState = false) => {
     if (!backendIsEnabled()) {
+      setIsLoading(false);
       return;
+    }
+
+    if (!skipLoadingState) {
+      setIsLoading(true);
     }
 
     const timezone = getTimezone();
@@ -75,8 +82,20 @@ export function useWaterTracking() {
       if (statsResponse) {
         const mapped = mapBackendStatsToUserStats(statsResponse);
         setStats((prev) => {
-          const achievements = prev.achievements?.length ? prev.achievements : mapped.achievements;
-          const next = { ...mapped, achievements };
+          // Preserve unlock dates from local storage if they exist
+          const mergedAchievements = mapped.achievements.map((backendAch) => {
+            const localAch = prev.achievements?.find(a => a.id === backendAch.id);
+            if (localAch && localAch.unlocked && localAch.unlockedDate) {
+              // Keep the original unlock date from local storage
+              return {
+                ...backendAch,
+                unlockedDate: localAch.unlockedDate,
+              };
+            }
+            return backendAch;
+          });
+          
+          const next = { ...mapped, achievements: mergedAchievements };
           saveUserStats(next);
           return next;
         });
@@ -84,6 +103,10 @@ export function useWaterTracking() {
     } catch (error) {
       console.warn('Failed to load backend hydration data', error);
       loadLocalTodayRecord();
+    } finally {
+      if (!skipLoadingState) {
+        setIsLoading(false);
+      }
     }
   }, [loadLocalTodayRecord]);
 
@@ -92,6 +115,7 @@ export function useWaterTracking() {
       refreshBackendData();
     } else {
       loadLocalTodayRecord();
+      setIsLoading(false);
     }
   }, [loadLocalTodayRecord, refreshBackendData]);
 
@@ -186,7 +210,53 @@ export function useWaterTracking() {
         throw new Error('Unable to log hydration with the backend.');
       }
 
-      await refreshBackendData();
+      console.log('Water logged successfully, refreshing data...');
+      
+      // Force a full refresh to get the latest data
+      const today = getTodayKey();
+      
+      console.log('Fetching data for date:', today, 'timezone:', timezone);
+      
+      const [record, statsResponse] = await Promise.all([
+        fetchDayRecordFromBackend(today, timezone),
+        fetchHydrationStatsFromBackend(timezone, 7),
+      ]);
+
+      console.log('Raw API Response - record:', JSON.stringify(record, null, 2));
+      console.log('Raw API Response - statsResponse:', JSON.stringify(statsResponse, null, 2));
+      console.log('Fetched updated record:', record);
+      console.log('Total drinks in record:', record?.drinks.length || 0);
+
+      if (record) {
+        setTodayRecord(record);
+        saveDayRecord(record);
+        setRecordsByDate((prev) => ({ ...prev, [record.date]: record }));
+        if (record.goal) {
+          setGoal(record.goal);
+          saveDailyGoal(record.goal);
+        }
+      }
+
+      if (statsResponse) {
+        const mapped = mapBackendStatsToUserStats(statsResponse);
+        setStats((prev) => {
+          const mergedAchievements = mapped.achievements.map((backendAch) => {
+            const localAch = prev.achievements?.find(a => a.id === backendAch.id);
+            if (localAch && localAch.unlocked && localAch.unlockedDate) {
+              return {
+                ...backendAch,
+                unlockedDate: localAch.unlockedDate,
+              };
+            }
+            return backendAch;
+          });
+          
+          const next = { ...mapped, achievements: mergedAchievements };
+          saveUserStats(next);
+          return next;
+        });
+      }
+
       return;
     }
 
@@ -245,7 +315,7 @@ export function useWaterTracking() {
       setTodayRecord(updatedRecord);
       updateStats(updatedRecord, previousRecord);
     }
-  }, [refreshBackendData, todayRecord, updateStats]);
+  }, [todayRecord, updateStats]);
 
   const updateGoal = useCallback(async (newGoal: number) => {
     setGoal(newGoal);
@@ -261,41 +331,95 @@ export function useWaterTracking() {
     if (backendIsEnabled()) {
       try {
         await syncGoalToBackend(newGoal);
-        await refreshBackendData();
+        await refreshBackendData(true);
       } catch (error) {
         console.warn('Failed to sync goal with backend', error);
       }
     }
   }, [todayRecord, refreshBackendData]);
 
-  const removeDrink = useCallback((drinkId: string, date?: string) => {
-    if (backendIsEnabled()) {
-      console.warn('Removing drinks is not yet supported by the backend API.');
-      void refreshBackendData();
-      return;
+  const removeDrink = useCallback(async (drinkId: string, date?: string): Promise<DayRecord | null> => {
+    const targetDate = date || getTodayKey();
+    const currentRecord = recordsByDate[targetDate]
+      ?? (targetDate === getTodayKey() ? todayRecord : null)
+      ?? getDayRecord(targetDate);
+
+    if (!currentRecord) {
+      return null;
     }
 
-    const targetDate = date || getTodayKey();
-    const record = date ? getDayRecord(date) : todayRecord;
-    
-    if (!record) return;
+    const drinkToRemove = currentRecord.drinks.find((d) => d.id === drinkId);
+    if (!drinkToRemove) {
+      return currentRecord;
+    }
 
-    const updatedDrinks = record.drinks.filter(d => d.id !== drinkId);
+    const updatedDrinks = currentRecord.drinks.filter((d) => d.id !== drinkId);
     const totalHydration = updatedDrinks.reduce((sum, d) => sum + d.hydrationValue, 0);
 
     const updatedRecord: DayRecord = {
-      ...record,
+      ...currentRecord,
       drinks: updatedDrinks,
       totalHydration,
     };
 
-    saveDayRecord(updatedRecord);
-    setRecordsByDate((prev) => ({ ...prev, [updatedRecord.date]: updatedRecord }));
-    
-    if (targetDate === getTodayKey()) {
-      setTodayRecord(updatedRecord);
+    const applyLocalUpdates = () => {
+      saveDayRecord(updatedRecord);
+      setRecordsByDate((prev) => ({ ...prev, [updatedRecord.date]: updatedRecord }));
+      if (targetDate === getTodayKey()) {
+        setTodayRecord(updatedRecord);
+      }
+    };
+
+    if (backendIsEnabled()) {
+      await removeHydrationLogFromBackend(drinkId);
+      applyLocalUpdates();
+      void (async () => {
+        try {
+          await refreshBackendData(true);
+        } catch (error) {
+          console.warn('Failed to refresh backend data after removal', error);
+        }
+      })();
+    } else {
+      applyLocalUpdates();
+      setStats((prevStats) => {
+        const nextStats: UserStats = {
+          ...prevStats,
+          totalWaterConsumed: Math.max(0, prevStats.totalWaterConsumed - drinkToRemove.hydrationValue),
+        };
+
+        if (prevStats.history) {
+          nextStats.history = prevStats.history.map((entry) => {
+            if (entry.date !== targetDate) {
+              return entry;
+            }
+            const nextTotalVolume = Math.max(0, entry.totalVolumeMl - drinkToRemove.amount);
+            const nextTotalEffective = Math.max(0, entry.totalEffectiveMl - drinkToRemove.hydrationValue);
+            const nextProgress = entry.goalVolumeMl > 0 ? (nextTotalEffective / entry.goalVolumeMl) * 100 : 0;
+            let status = 'not_started';
+            if (nextTotalEffective >= entry.goalVolumeMl && entry.goalVolumeMl > 0) {
+              status = 'completed';
+            } else if (nextTotalEffective > 0) {
+              status = 'in_progress';
+            }
+
+            return {
+              ...entry,
+              totalVolumeMl: nextTotalVolume,
+              totalEffectiveMl: nextTotalEffective,
+              progressPercentage: nextProgress,
+              status,
+            };
+          });
+        }
+
+        saveUserStats(nextStats);
+        return nextStats;
+      });
     }
-  }, [refreshBackendData, todayRecord]);
+
+    return updatedRecord;
+  }, [recordsByDate, todayRecord, refreshBackendData]);
 
   const loadRecordForDate = useCallback(async (date: string): Promise<DayRecord | null> => {
     if (recordsByDate[date]) {
@@ -343,5 +467,6 @@ export function useWaterTracking() {
     removeDrink,
     loadRecordForDate,
     recordsByDate,
+    isLoading,
   };
 }

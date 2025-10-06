@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment } from '@/lib/storage';
-import { syncProfileToBackend } from '@/lib/backend';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment, getBackendUserId, getUser } from '@/lib/storage';
+import { backendIsEnabled, ensureBackendUser } from '@/lib/backend';
+import { getUser as getBackendUser, createUser as createBackendUser, getAuthState } from '@/lib/api';
 import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit } from '@/types/water';
-import { getWeatherData } from '@/lib/weather';
+import { getWeatherData, getLocationPreference } from '@/lib/weather';
 import { LocationPicker } from '@/components/LocationPicker';
 
 export default function ProfileSetup() {
@@ -32,32 +33,51 @@ export default function ProfileSetup() {
       return;
     }
 
-    const savedWeightUnit = getWeightUnitPreference();
-    setWeightUnit(savedWeightUnit);
+    const checkExistingProfile = async () => {
+      // Check if profile exists in backend
+      if (backendIsEnabled()) {
+        try {
+          const authState = await getAuthState();
+          if (authState?.hasProfile) {
+            // Profile already exists, redirect to app
+            toast.info('Profile already set up');
+            navigate('/app', { replace: true });
+            return;
+          }
+        } catch (error) {
+          console.warn('Failed to check backend profile status', error);
+        }
+      }
 
-    const savedTempUnit = getTemperatureUnitPreference();
-    setTemperatureUnit(savedTempUnit);
+      const savedWeightUnit = getWeightUnitPreference();
+      setWeightUnit(savedWeightUnit);
 
-    // Check if weather is already enabled
-    const weatherAdjustment = getUseWeatherAdjustment();
-    setWeatherEnabled(weatherAdjustment);
-    setShowLocationPicker(weatherAdjustment);
+      const savedTempUnit = getTemperatureUnitPreference();
+      setTemperatureUnit(savedTempUnit);
 
-    // Check if profile already exists
-    const existingProfile = getUserProfile();
-    if (existingProfile) {
-      const displayWeight = savedWeightUnit === 'lbs' 
-        ? kgToLbs(existingProfile.weight) 
-        : existingProfile.weight;
-      setWeight(displayWeight.toFixed(1));
-      setAge(existingProfile.age.toString());
-      setGender(existingProfile.gender);
-      setActivityLevel(existingProfile.activityLevel);
-      setClimate(existingProfile.climate);
-    } else {
-      // Set default weight based on unit
-      setWeight(savedWeightUnit === 'lbs' ? '154' : '70');
-    }
+      // Check if weather is already enabled
+      const weatherAdjustment = getUseWeatherAdjustment();
+      setWeatherEnabled(weatherAdjustment);
+      setShowLocationPicker(weatherAdjustment);
+
+      // Check if profile already exists locally
+      const existingProfile = getUserProfile();
+      if (existingProfile) {
+        const displayWeight = savedWeightUnit === 'lbs' 
+          ? kgToLbs(existingProfile.weight) 
+          : existingProfile.weight;
+        setWeight(displayWeight.toFixed(1));
+        setAge(existingProfile.age.toString());
+        setGender(existingProfile.gender);
+        setActivityLevel(existingProfile.activityLevel);
+        setClimate(existingProfile.climate);
+      } else {
+        // Set default weight based on unit
+        setWeight(savedWeightUnit === 'lbs' ? '154' : '70');
+      }
+    };
+
+    checkExistingProfile();
   }, [navigate]);
 
   const handleEnableWeather = async () => {
@@ -110,10 +130,15 @@ export default function ProfileSetup() {
       return;
     }
 
+    // Save user's timezone
+    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    saveTimezone(detectedTimezone);
+
+    const user = getUser();
     const profile: UserProfile = {
-      name: '', // Will be populated from user storage
-      email: '', // Will be populated from user storage
-      weight: weightInKg, // Always store in kg
+      name: user?.name || '',
+      email: user?.email || '',
+      weight: weightInKg,
       age: ageNum,
       gender,
       activityLevel,
@@ -121,32 +146,63 @@ export default function ProfileSetup() {
       createdAt: new Date(),
       preferredWeightUnit: weightUnit,
       preferredTemperatureUnit: temperatureUnit,
+      timezone: detectedTimezone,
     };
 
+    // Save locally
     saveUserProfile(profile);
     saveWeightUnitPreference(weightUnit);
     saveTemperatureUnitPreference(temperatureUnit);
     
-    // Save user's detected timezone
-    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    saveTimezone(detectedTimezone);
-    
-    // Calculate and save personalized goal with weather adjustment if available
-    const useWeather = true; // Enable by default
-    const personalizedGoal = calculatePersonalizedGoal(profile, useWeather);
+    // Calculate and save personalized goal
+    const personalizedGoal = calculatePersonalizedGoal(profile, weatherEnabled);
     saveDailyGoal(personalizedGoal);
-    
-    if (import.meta.env.VITE_API_BASE_URL) {
+
+    // Create profile in backend if enabled
+    if (backendIsEnabled()) {
       try {
-        await syncProfileToBackend();
+        const locationPreference = getLocationPreference();
+        
+        const payload = {
+          email: user?.email || '',
+          displayName: user?.name || user?.email?.split('@')[0] || '',
+          weight: {
+            value: weightInKg,
+            unit: 'kg' as const,
+          },
+          age: ageNum,
+          gender: gender,
+          activityLevel: activityLevel,
+          timezone: detectedTimezone,
+          location: {
+            city: locationPreference.type === 'manual' ? locationPreference.manualLocation?.name ?? '' : '',
+            region: climate,
+            country: '',
+            latitude: locationPreference.type === 'manual' ? locationPreference.manualLocation?.lat : undefined,
+            longitude: locationPreference.type === 'manual' ? locationPreference.manualLocation?.lon : undefined,
+          },
+          volumeUnit: 'ml',
+          temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
+          progressWheelStyle: 'drink_colors',
+          weatherAdjustmentsEnabled: weatherEnabled,
+          customGoalLiters: personalizedGoal / 1000,
+        };
+
+        const response = await createBackendUser(payload);
+        
+        if (response?.user) {
+          toast.success(`Profile created! Daily goal: ${(personalizedGoal / 1000).toFixed(1)}L`);
+        }
       } catch (error) {
-        console.error('Failed to sync profile with backend', error);
-        toast.error('Profile saved locally, but backend sync failed. Please check your connection.');
+        console.error('Failed to create profile in backend', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast.warning(`Profile saved locally, but backend sync failed: ${message}`);
       }
+    } else {
+      toast.success(`Your daily goal is set to ${(personalizedGoal / 1000).toFixed(1)}L`);
     }
 
-    toast.success(`Your daily goal is set to ${(personalizedGoal / 1000).toFixed(1)}L`);
-    navigate('/app');
+    navigate('/app', { replace: true });
   };
 
   const handleWeightUnitChange = (newUnit: WeightUnit) => {

@@ -104,10 +104,12 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 				r.Get("/drinks", api.ListDrinks)
 				r.Post("/drinks", api.CreateDrink)
 				r.Patch("/drinks/{drinkID}", api.UpdateDrink)
+				r.Delete("/drinks/{drinkID}", api.DeleteDrink)
 
 				r.Get("/hydration/daily", api.DailySummary)
 				r.Get("/hydration/stats", api.HydrationStats)
 				r.Post("/hydration/logs", api.LogHydration)
+				r.Delete("/hydration/logs/{logID}", api.DeleteHydrationLog)
 			})
 		})
 	})

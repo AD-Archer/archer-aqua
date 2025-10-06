@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,8 @@ type HydrationService struct {
 func NewHydrationService(db *gorm.DB) *HydrationService {
 	return &HydrationService{db: db}
 }
+
+var ErrHydrationLogNotFound = errors.New("hydration log not found")
 
 func (s *HydrationService) LogHydration(ctx context.Context, userID uuid.UUID, input dto.LogHydrationRequest) (*models.HydrationLog, error) {
 	user, err := s.fetchUser(ctx, userID)
@@ -120,12 +123,16 @@ func (s *HydrationService) DailySummary(ctx context.Context, userID uuid.UUID, d
 		return nil, err
 	}
 
-	date = date.In(loc)
-	start, end := utils.DayBounds(date, loc)
+	dateKey := date.Format(time.DateOnly)
+	localDate, err := time.ParseInLocation(time.DateOnly, dateKey, loc)
+	if err != nil {
+		return nil, fmt.Errorf("parse date in location: %w", err)
+	}
+	dateKey = localDate.Format(time.DateOnly)
 
 	var logs []models.HydrationLog
 	if err := s.db.WithContext(ctx).
-		Where("user_id = ? AND consumed_at BETWEEN ? AND ?", userID, start.UTC(), end.UTC()).
+		Where("user_id = ? AND daily_key = ?", userID, dateKey).
 		Order("consumed_at ASC").
 		Find(&logs).Error; err != nil {
 		return nil, fmt.Errorf("fetch logs: %w", err)
@@ -158,7 +165,7 @@ func (s *HydrationService) DailySummary(ctx context.Context, userID uuid.UUID, d
 	}
 
 	return &dto.DailySummaryResponse{
-		Date:               start.Format("2006-01-02"),
+		Date:               localDate.Format(time.DateOnly),
 		Timezone:           loc.String(),
 		TotalVolumeMl:      totalVolume,
 		TotalEffectiveMl:   totalEffective,
@@ -276,6 +283,22 @@ func (s *HydrationService) WeeklyStats(ctx context.Context, userID uuid.UUID, ti
 		TotalVolumeMl:    totalVolume,
 		TotalEffectiveMl: totalEffective,
 	}, nil
+}
+
+func (s *HydrationService) DeleteHydrationLog(ctx context.Context, userID, logID uuid.UUID) error {
+	var logEntry models.HydrationLog
+	if err := s.db.WithContext(ctx).First(&logEntry, "id = ? AND user_id = ?", logID, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrHydrationLogNotFound
+		}
+		return fmt.Errorf("fetch hydration log: %w", err)
+	}
+
+	if err := s.db.WithContext(ctx).Delete(&models.HydrationLog{}, "id = ?", logID).Error; err != nil {
+		return fmt.Errorf("delete hydration log: %w", err)
+	}
+
+	return nil
 }
 
 func (s *HydrationService) fetchUser(ctx context.Context, userID uuid.UUID) (*models.User, error) {

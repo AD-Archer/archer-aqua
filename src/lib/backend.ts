@@ -4,6 +4,7 @@ import {
   getDailySummary,
   getAuthState,
   logHydration,
+  deleteHydrationLog,
   updateUser,
   type ApiDailySummaryResponse,
   type ApiHydrationLogResponse,
@@ -179,6 +180,20 @@ export async function logHydrationToBackend(
   return response;
 }
 
+export async function removeHydrationLogFromBackend(logId: string): Promise<boolean> {
+  if (!backendIsEnabled()) {
+    return false;
+  }
+
+  const userId = await ensureBackendUser();
+  if (!userId) {
+    return false;
+  }
+
+  await deleteHydrationLog(userId, logId);
+  return true;
+}
+
 export async function fetchDailySummaryFromBackend(date: string, timezone: string): Promise<ApiDailySummaryResponse | null> {
   if (!backendIsEnabled()) {
     return null;
@@ -206,12 +221,15 @@ export async function fetchHydrationStatsFromBackend(timezone: string, days = 7)
 export function mapBackendStatsToUserStats(stats: ApiHydrationStatsResponse): UserStats {
   const achievedDays = stats.dailySummaries.filter((summary) => summary.status !== 'not_started');
 
+  // Calculate achievements based on backend data
+  const achievements = getAchievementsFromBackendStats(stats);
+
   return {
     currentStreak: stats.streakCount,
     longestStreak: stats.bestStreak,
     totalDaysTracked: achievedDays.length,
     totalWaterConsumed: stats.totalEffectiveMl,
-    achievements: [],
+    achievements,
     history: stats.dailySummaries.map((summary) => ({
       date: summary.date,
       timezone: summary.timezone,
@@ -224,12 +242,84 @@ export function mapBackendStatsToUserStats(stats: ApiHydrationStatsResponse): Us
   };
 }
 
+function getAchievementsFromBackendStats(stats: ApiHydrationStatsResponse) {
+  const completedDays = stats.dailySummaries.filter((s) => s.status === 'completed').length;
+  const totalMl = stats.totalEffectiveMl;
+  const currentStreak = stats.streakCount;
+  
+  return [
+    {
+      id: 'first_day',
+      title: 'First Drop',
+      description: 'Complete your first day',
+      icon: 'first_day',
+      unlocked: completedDays >= 1,
+      unlockedDate: completedDays >= 1 ? new Date() : undefined,
+      requirement: 1,
+      currentProgress: completedDays,
+    },
+    {
+      id: 'week_streak',
+      title: 'Week Warrior',
+      description: 'Maintain a 7-day streak',
+      icon: 'week_streak',
+      unlocked: currentStreak >= 7,
+      unlockedDate: currentStreak >= 7 ? new Date() : undefined,
+      requirement: 7,
+      currentProgress: currentStreak,
+    },
+    {
+      id: 'month_streak',
+      title: 'Hydration Hero',
+      description: 'Maintain a 30-day streak',
+      icon: 'month_streak',
+      unlocked: currentStreak >= 30,
+      unlockedDate: currentStreak >= 30 ? new Date() : undefined,
+      requirement: 30,
+      currentProgress: currentStreak,
+    },
+    {
+      id: 'total_10l',
+      title: 'Ocean Explorer',
+      description: 'Drink 10 liters total',
+      icon: 'total_10l',
+      unlocked: totalMl >= 10000,
+      unlockedDate: totalMl >= 10000 ? new Date() : undefined,
+      requirement: 10000,
+      currentProgress: totalMl,
+    },
+    {
+      id: 'total_100l',
+      title: 'Aqua Master',
+      description: 'Drink 100 liters total',
+      icon: 'total_100l',
+      unlocked: totalMl >= 100000,
+      unlockedDate: totalMl >= 100000 ? new Date() : undefined,
+      requirement: 100000,
+      currentProgress: totalMl,
+    },
+    {
+      id: 'perfect_week',
+      title: 'Perfect Week',
+      description: 'Meet your goal 7 days in a row',
+      icon: 'perfect_week',
+      unlocked: currentStreak >= 7,
+      unlockedDate: currentStreak >= 7 ? new Date() : undefined,
+      requirement: 7,
+      currentProgress: currentStreak,
+    },
+  ];
+}
+
 export async function fetchDayRecordFromBackend(date: string, timezone: string): Promise<DayRecord | null> {
   const summary = await fetchDailySummaryFromBackend(date, timezone);
+  console.log('fetchDailySummaryFromBackend returned:', JSON.stringify(summary, null, 2));
   if (!summary) {
     return null;
   }
-  return mapDailySummaryToDayRecord(summary);
+  const mapped = mapDailySummaryToDayRecord(summary);
+  console.log('Mapped to DayRecord:', JSON.stringify(mapped, null, 2));
+  return mapped;
 }
 
 const LABEL_TO_DRINK_TYPE: Record<string, DrinkType> = {

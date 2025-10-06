@@ -112,6 +112,39 @@ func (s *DrinkService) UpdateDrink(ctx context.Context, userID, drinkID uuid.UUI
 	return drink, nil
 }
 
+func (s *DrinkService) DeleteDrink(ctx context.Context, userID, drinkID uuid.UUID) error {
+	// First check if the drink exists and belongs to the user
+	drink, err := s.getOwnedDrink(ctx, userID, drinkID)
+	if err != nil {
+		return err
+	}
+
+	// Check if the drink is being used in any hydration logs
+	var logCount int64
+	if err := s.db.WithContext(ctx).Model(&models.HydrationLog{}).
+		Where("drink_id = ?", drinkID).
+		Count(&logCount).Error; err != nil {
+		return fmt.Errorf("check drink usage: %w", err)
+	}
+
+	// If the drink has been used in logs, archive it instead of deleting
+	if logCount > 0 {
+		now := time.Now().UTC()
+		drink.ArchivedAt = &now
+		if err := s.db.WithContext(ctx).Save(drink).Error; err != nil {
+			return fmt.Errorf("archive drink: %w", err)
+		}
+		return nil
+	}
+
+	// If no logs exist, we can safely delete the drink
+	if err := s.db.WithContext(ctx).Delete(drink).Error; err != nil {
+		return fmt.Errorf("delete drink: %w", err)
+	}
+
+	return nil
+}
+
 func (s *DrinkService) getOwnedDrink(ctx context.Context, userID, drinkID uuid.UUID) (*models.Drink, error) {
 	var drink models.Drink
 	if err := s.db.WithContext(ctx).First(&drink, "id = ? AND user_id = ?", drinkID, userID).Error; err != nil {

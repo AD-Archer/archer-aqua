@@ -14,10 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle } from '@/lib/storage';
+import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle, getUserProfile } from '@/lib/storage';
 import { format, parseISO } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import { backendIsEnabled } from '@/lib/backend';
+import { getAuthState } from '@/lib/api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +33,7 @@ import {
 
 const Index = () => {
   const navigate = useNavigate();
-  const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink, loadRecordForDate, recordsByDate } = useWaterTracking();
+  const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink, loadRecordForDate, recordsByDate, isLoading: isDataLoading } = useWaterTracking();
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
   const [todayKey, setTodayKey] = useState(getTodayKey());
   const [selectedDate, setSelectedDate] = useState<string>(todayKey);
@@ -41,6 +42,7 @@ const Index = () => {
   const [currentTab, setCurrentTab] = useState('today');
   const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
   const [progressWheelStyle, setProgressWheelStyle] = useState(getProgressWheelStyle());
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
 
   // Get all drinks for today
   const allDrinks = todayRecord?.drinks || [];
@@ -65,9 +67,43 @@ const Index = () => {
   const recentUniqueDrinks = getUniqueRecentDrinks();
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      navigate('/');
-    }
+    const checkAuthAndProfile = async () => {
+      if (!isAuthenticated()) {
+        navigate('/');
+        return;
+      }
+
+      // Check if profile is complete in backend
+      if (backendIsEnabled()) {
+        try {
+          const authState = await getAuthState();
+          if (!authState?.hasProfile) {
+            // Profile not complete, redirect to setup
+            navigate('/profile-setup', { replace: true });
+            return;
+          }
+        } catch (error) {
+          console.warn('Failed to check backend profile status', error);
+          // Fallback to local check
+          const localProfile = getUserProfile();
+          if (!localProfile || !localProfile.weight || !localProfile.age) {
+            navigate('/profile-setup', { replace: true });
+            return;
+          }
+        }
+      } else {
+        // Check local profile
+        const localProfile = getUserProfile();
+        if (!localProfile || !localProfile.weight || !localProfile.age) {
+          navigate('/profile-setup', { replace: true });
+          return;
+        }
+      }
+      
+      setIsCheckingProfile(false);
+    };
+
+    checkAuthAndProfile();
   }, [navigate]);
 
   const handleQuickAdd = async (amount: number) => {
@@ -142,17 +178,17 @@ const Index = () => {
   };
 
   const handleRemoveDrink = async (drinkId: string, date?: string) => {
-    removeDrink(drinkId, date);
-    if (backendIsEnabled()) {
-      toast.info('Removal from the backend will be available soon. This entry may re-sync from the server.');
-    } else {
-      toast.success('Drink removed');
-    }
     const targetDate = date ?? selectedDate;
     setIsRecordLoading(true);
     try {
-      const updatedRecord = await loadRecordForDate(targetDate);
-      setSelectedRecord(updatedRecord);
+      const updatedRecord = await removeDrink(drinkId, date);
+      if (targetDate === selectedDate) {
+        setSelectedRecord(updatedRecord ?? null);
+      }
+      toast.success('Drink removed');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove drink';
+      toast.error(message);
     } finally {
       setIsRecordLoading(false);
     }
@@ -191,6 +227,27 @@ const Index = () => {
     const parsed = parseISO(selectedDate);
     return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
   })();
+
+  // Show loading state while checking profile or loading data
+  if (isCheckingProfile || isDataLoading) {
+    return (
+      <>
+        <SEO 
+          title="Dashboard"
+          description="Track your daily water intake with Archer Aqua. Monitor hydration levels, view achievements, and stay healthy with AI-powered insights."
+          url="https://aqua.adarcher.app/"
+        />
+        <div className="min-h-screen bg-gradient-sky flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Droplet className="h-8 w-8 text-primary" />
+            </div>
+            <p className="text-muted-foreground">Loading your hydration data...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

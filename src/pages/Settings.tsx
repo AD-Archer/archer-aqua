@@ -11,13 +11,16 @@ import { Switch } from '@/components/ui/switch';
 import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius, ProgressWheelStyle } from '@/types/water';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { WeatherCard } from '@/components/WeatherCard';
 import { LocationPicker } from '@/components/LocationPicker';
 import { WeeklyWeatherView } from '@/components/WeeklyWeatherView';
+import { backendIsEnabled, ensureBackendUser, syncProfileToBackend } from '@/lib/backend';
+import { getUser as getBackendUser, updateUser as updateBackendUser, getAuthState, deleteDrink, isApiEnabled } from '@/lib/api';
+import { getLocationPreference } from '@/lib/weather';
 
 const CUSTOM_DRINK_ICONS = [
   'Droplet', 'Coffee', 'Wine', 'Beer', 'Milk', 'Apple', 'Cherry', 
@@ -54,49 +57,148 @@ export default function Settings() {
   const [isEditDrinkDialogOpen, setIsEditDrinkDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      navigate('/auth');
-      return;
-    }
+    const checkAuthAndLoadProfile = async () => {
+      if (!isAuthenticated()) {
+        navigate('/auth');
+        return;
+      }
 
-    const savedWeightUnit = getWeightUnitPreference();
-    setWeightUnit(savedWeightUnit);
+      const loadUserData = async () => {
+        const savedWeightUnit = getWeightUnitPreference();
+        setWeightUnit(savedWeightUnit);
 
-    const profile = getUserProfile();
-    if (profile) {
-      const displayWeight = savedWeightUnit === 'lbs' 
-        ? kgToLbs(profile.weight) 
-        : profile.weight;
-      setWeight(displayWeight.toFixed(1));
-      setAge(profile.age.toString());
-      setGender(profile.gender);
-      setActivityLevel(profile.activityLevel);
-      setClimate(profile.climate);
-    }
+        // Try to load from backend first if available
+        if (backendIsEnabled()) {
+          try {
+            const authState = await getAuthState();
+            
+            // Check if profile exists
+            if (!authState?.hasProfile) {
+              navigate('/profile-setup', { replace: true });
+              return;
+            }
+            
+            const userId = getBackendUserId();
+            if (userId) {
+              const response = await getBackendUser(userId);
+              if (response?.user) {
+                const backendUser = response.user;
+                
+                // Update local state from backend
+                const displayWeight = savedWeightUnit === 'lbs' 
+                  ? kgToLbs(backendUser.weightKg) 
+                  : backendUser.weightKg;
+                setWeight(displayWeight.toFixed(1));
+                setAge(backendUser.age.toString());
+                setGender(backendUser.gender as Gender);
+                setActivityLevel(backendUser.activityLevel as ActivityLevel);
+                
+                // Set unit preferences from backend
+                const volumeUnitMap: Record<string, VolumeUnit> = {
+                  'ml': 'ml',
+                  'oz': 'oz',
+                };
+                const backendUnit = volumeUnitMap[backendUser.volumeUnit] || 'ml';
+                setUnitPreference(backendUnit);
+                saveUnitPreference(backendUnit);
+                
+                const tempUnit = backendUser.temperatureUnit === 'fahrenheit' ? 'F' : 'C';
+                setTemperatureUnit(tempUnit);
+                saveTemperatureUnitPreference(tempUnit);
+                
+                setTimezone(backendUser.timezone);
+                saveTimezone(backendUser.timezone);
+                
+                setUseWeatherAdjustment(backendUser.weatherAdjustmentsEnabled);
+                saveUseWeatherAdjustment(backendUser.weatherAdjustmentsEnabled);
+                
+                const wheelStyleMap: Record<string, ProgressWheelStyle> = {
+                  'drink_colors': 'drink-colors',
+                  'black_white': 'black-white',
+                  'water_blue': 'water-blue',
+                };
+                const backendStyle = wheelStyleMap[backendUser.progressWheelStyle] || 'drink-colors';
+                setProgressWheelStyle(backendStyle);
+                saveProgressWheelStyle(backendStyle);
+                
+                // Set goal from backend
+                const goalMl = backendUser.customGoalLiters 
+                  ? backendUser.customGoalLiters * 1000 
+                  : backendUser.dailyGoalLiters * 1000;
+                saveDailyGoal(goalMl);
+                setManualGoal((goalMl / 1000).toFixed(1));
+                
+                // Update local profile storage
+                const profile: UserProfile = {
+                  name: backendUser.displayName,
+                  email: backendUser.email,
+                  weight: backendUser.weightKg,
+                  age: backendUser.age,
+                  gender: backendUser.gender as Gender,
+                  activityLevel: backendUser.activityLevel as ActivityLevel,
+                  climate: 'moderate',
+                  createdAt: new Date(backendUser.createdAt),
+                  preferredWeightUnit: savedWeightUnit,
+                  preferredTemperatureUnit: tempUnit,
+                  timezone: backendUser.timezone,
+                };
+                saveUserProfile(profile);
+                
+                return; // Successfully loaded from backend
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to load user data from backend, using local storage', error);
+          }
+        }
 
-    const currentGoal = getDailyGoal();
-    setManualGoal((currentGoal / 1000).toFixed(1));
-    
-    const unit = getUnitPreference();
-    setUnitPreference(unit);
-    
-    const tempUnit = getTemperatureUnitPreference();
-    setTemperatureUnit(tempUnit);
-    
-    const tz = getTimezone();
-    setTimezone(tz);
-    
-    const drinks = getCustomDrinks();
-    setCustomDrinks(drinks);
-    
-    const weatherPref = getUseWeatherAdjustment();
-    setUseWeatherAdjustment(weatherPref);
-    
-    const wheelStyle = getProgressWheelStyle();
-    setProgressWheelStyle(wheelStyle);
+        // Fallback to local storage
+        const profile = getUserProfile();
+        if (!profile || !profile.weight || !profile.age) {
+          navigate('/profile-setup', { replace: true });
+          return;
+        }
+        
+        if (profile) {
+          const displayWeight = savedWeightUnit === 'lbs' 
+            ? kgToLbs(profile.weight) 
+            : profile.weight;
+          setWeight(displayWeight.toFixed(1));
+          setAge(profile.age.toString());
+          setGender(profile.gender);
+          setActivityLevel(profile.activityLevel);
+          setClimate(profile.climate);
+        }
+
+        const currentGoal = getDailyGoal();
+        setManualGoal((currentGoal / 1000).toFixed(1));
+        
+        const unit = getUnitPreference();
+        setUnitPreference(unit);
+        
+        const tempUnit = getTemperatureUnitPreference();
+        setTemperatureUnit(tempUnit);
+        
+        const tz = getTimezone();
+        setTimezone(tz);
+        
+        const drinks = getCustomDrinks();
+        setCustomDrinks(drinks);
+        
+        const weatherPref = getUseWeatherAdjustment();
+        setUseWeatherAdjustment(weatherPref);
+        
+        const wheelStyle = getProgressWheelStyle();
+        setProgressWheelStyle(wheelStyle);
+      };
+
+      await loadUserData();
+    };
+
+    checkAuthAndLoadProfile();
   }, [navigate]);
 
-  const handleUpdateProfile = () => {
+  const handleUpdateProfile = async () => {
     const weightValue = parseFloat(weight);
     const ageNum = parseInt(age);
 
@@ -136,9 +238,24 @@ export default function Settings() {
     if (usePersonalizedGoal) {
       const personalizedGoal = calculatePersonalizedGoal(profile, useWeatherAdjustment);
       saveDailyGoal(personalizedGoal);
-      toast.success(`Profile updated! Daily goal: ${(personalizedGoal / 1000).toFixed(1)}L`);
+    }
+
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        await syncProfileToBackend();
+        toast.success('Profile synced to backend!');
+      } catch (error) {
+        console.error('Failed to sync profile to backend', error);
+        toast.warning('Profile updated locally, but failed to sync with server');
+      }
     } else {
-      toast.success('Profile updated!');
+      if (usePersonalizedGoal) {
+        const personalizedGoal = calculatePersonalizedGoal(profile, useWeatherAdjustment);
+        toast.success(`Profile updated! Daily goal: ${(personalizedGoal / 1000).toFixed(1)}L`);
+      } else {
+        toast.success('Profile updated!');
+      }
     }
   };
 
@@ -170,21 +287,61 @@ export default function Settings() {
     navigate('/');
   };
 
-  const handleUnitChange = (unit: VolumeUnit) => {
+  const handleUnitChange = async (unit: VolumeUnit) => {
     setUnitPreference(unit);
     saveUnitPreference(unit);
+    
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          await updateBackendUser(userId, { volumeUnit: unit });
+        }
+      } catch (error) {
+        console.error('Failed to sync unit preference to backend', error);
+      }
+    }
+    
     toast.success(`Unit preference updated to ${unit.toUpperCase()}`);
   };
 
-  const handleTemperatureUnitChange = (unit: TemperatureUnit) => {
+  const handleTemperatureUnitChange = async (unit: TemperatureUnit) => {
     setTemperatureUnit(unit);
     saveTemperatureUnitPreference(unit);
+    
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          const tempUnitBackend = unit === 'F' ? 'fahrenheit' : 'celsius';
+          await updateBackendUser(userId, { temperatureUnit: tempUnitBackend });
+        }
+      } catch (error) {
+        console.error('Failed to sync temperature preference to backend', error);
+      }
+    }
+    
     toast.success(`Temperature unit updated to °${unit}`);
   };
 
-  const handleTimezoneChange = (tz: string) => {
+  const handleTimezoneChange = async (tz: string) => {
     setTimezone(tz);
     saveTimezone(tz);
+    
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          await updateBackendUser(userId, { timezone: tz });
+        }
+      } catch (error) {
+        console.error('Failed to sync timezone to backend', error);
+      }
+    }
+    
     toast.success(`Timezone updated to ${tz}`);
   };
 
@@ -214,11 +371,27 @@ export default function Settings() {
     setIsAddDrinkDialogOpen(false);
   };
 
-  const handleDeleteCustomDrink = (id: string) => {
+  const handleDeleteCustomDrink = async (id: string) => {
     const drink = customDrinks.find(d => d.id === id);
-    deleteCustomDrink(id);
-    setCustomDrinks(customDrinks.filter(d => d.id !== id));
-    toast.success(`Deleted "${drink?.name}"`);
+    
+    try {
+      // If API is enabled and user is authenticated, delete from backend
+      if (isApiEnabled() && isAuthenticated()) {
+        const userId = getBackendUserId();
+        if (userId) {
+          await deleteDrink(userId, id);
+        }
+      } else {
+        // Fallback to local storage
+        deleteCustomDrink(id);
+      }
+      
+      setCustomDrinks(customDrinks.filter(d => d.id !== id));
+      toast.success(`Deleted "${drink?.name}"`);
+    } catch (error) {
+      console.error('Failed to delete drink:', error);
+      toast.error(`Failed to delete "${drink?.name}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleEditCustomDrink = (drink: CustomDrinkType) => {
@@ -241,15 +414,43 @@ export default function Settings() {
     setEditingDrink(null);
   };
 
-  const handleWeatherAdjustmentChange = (enabled: boolean) => {
+  const handleWeatherAdjustmentChange = async (enabled: boolean) => {
     setUseWeatherAdjustment(enabled);
     saveUseWeatherAdjustment(enabled);
+    
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          await updateBackendUser(userId, { weatherAdjustmentsEnabled: enabled });
+        }
+      } catch (error) {
+        console.error('Failed to sync weather adjustment preference to backend', error);
+      }
+    }
+    
     toast.success(`Weather-based adjustment ${enabled ? 'enabled' : 'disabled'}`);
   };
 
-  const handleProgressWheelStyleChange = (style: ProgressWheelStyle) => {
+  const handleProgressWheelStyleChange = async (style: ProgressWheelStyle) => {
     setProgressWheelStyle(style);
     saveProgressWheelStyle(style);
+    
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          // Convert kebab-case to snake_case for backend
+          const styleBackend = style.replace(/-/g, '_');
+          await updateBackendUser(userId, { progressWheelStyle: styleBackend });
+        }
+      } catch (error) {
+        console.error('Failed to sync progress wheel style to backend', error);
+      }
+    }
+    
     toast.success(`Progress wheel style updated!`);
   };
 

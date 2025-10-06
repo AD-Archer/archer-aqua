@@ -198,6 +198,24 @@ export interface UpdateUserPayload {
   customGoalLiters?: number | null;
 }
 
+export interface CreateDrinkPayload {
+  name: string;
+  type: string;
+  hydrationMultiplier: number;
+  defaultVolume?: ApiVolumePayload;
+  colorHex?: string;
+  source: string;
+}
+
+export interface UpdateDrinkPayload {
+  name?: string;
+  type?: string;
+  hydrationMultiplier?: number;
+  defaultVolume?: ApiVolumePayload;
+  colorHex?: string;
+  archived?: boolean;
+}
+
 export interface LogHydrationPayload {
   drinkId?: string;
   label: string;
@@ -236,10 +254,36 @@ export async function listDrinks(userId: string) {
   return request<ApiDrinkResponse[]>(`/api/users/${userId}/drinks`);
 }
 
+export async function createDrink(userId: string, payload: CreateDrinkPayload) {
+  return request<ApiDrinkResponse>(`/api/users/${userId}/drinks`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateDrink(userId: string, drinkId: string, payload: UpdateDrinkPayload) {
+  return request<ApiDrinkResponse>(`/api/users/${userId}/drinks/${drinkId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteDrink(userId: string, drinkId: string) {
+  return request<void>(`/api/users/${userId}/drinks/${drinkId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function logHydration(userId: string, payload: LogHydrationPayload) {
   return request<ApiHydrationLogResponse>(`/api/users/${userId}/hydration/logs`, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteHydrationLog(userId: string, logId: string) {
+  return request<void>(`/api/users/${userId}/hydration/logs/${logId}`, {
+    method: 'DELETE',
   });
 }
 

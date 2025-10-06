@@ -91,3 +91,33 @@ func (api *API) UpdateDrink(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, dto.NewDrinkResponse(*drink))
 }
+
+func (api *API) DeleteDrink(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	drinkID, err := parseUUIDParam(r, "drinkID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid drink id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	err = api.drinks.DeleteDrink(r.Context(), userID, drinkID)
+	if err != nil {
+		logError(api.logger, "delete drink", err)
+		if err.Error() == "drink not found" {
+			respondError(w, http.StatusNotFound, "drink not found")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "failed to delete drink")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

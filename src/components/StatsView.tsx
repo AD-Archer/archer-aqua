@@ -19,23 +19,71 @@ export function StatsView({ stats }: StatsViewProps) {
   );
   const milestone = getProgressToNextMilestone(stats.totalWaterConsumed);
 
-  // Mock data for the charts - you can replace this with real data later
-  const last7Days = [
-    { day: 'Mon', amount: 2200, goal: 2500 },
-    { day: 'Tue', amount: 2500, goal: 2500 },
-    { day: 'Wed', amount: 2100, goal: 2500 },
-    { day: 'Thu', amount: 2700, goal: 2500 },
-    { day: 'Fri', amount: 2400, goal: 2500 },
-    { day: 'Sat', amount: 2600, goal: 2500 },
-    { day: 'Sun', amount: 2300, goal: 2500 },
-  ];
+  // Use real data from backend history or fall back to mock data
+  const last7Days = stats.history && stats.history.length > 0
+    ? stats.history.slice(-7).map((day, index) => {
+        const date = new Date(day.date);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return {
+          day: dayNames[date.getDay()],
+          amount: Math.round(day.totalEffectiveMl),
+          goal: Math.round(day.goalVolumeMl),
+        };
+      })
+    : [
+        { day: 'Mon', amount: 2200, goal: 2500 },
+        { day: 'Tue', amount: 2500, goal: 2500 },
+        { day: 'Wed', amount: 2100, goal: 2500 },
+        { day: 'Thu', amount: 2700, goal: 2500 },
+        { day: 'Fri', amount: 2400, goal: 2500 },
+        { day: 'Sat', amount: 2600, goal: 2500 },
+        { day: 'Sun', amount: 2300, goal: 2500 },
+      ];
 
-  const streakData = [
-    { week: 'W1', streak: 3 },
-    { week: 'W2', streak: 5 },
-    { week: 'W3', streak: 7 },
-    { week: 'W4', streak: stats.currentStreak },
-  ];
+  // Calculate streak data from history
+  const streakData = stats.history && stats.history.length > 0
+    ? (() => {
+        // Group by weeks and calculate streak for each week
+        const weeks: { week: string; streak: number }[] = [];
+        let currentWeek = 1;
+        let currentStreak = 0;
+        
+        // Get last 28 days (4 weeks) of history
+        const recentHistory = stats.history.slice(-28);
+        
+        recentHistory.forEach((day, index) => {
+          const weekNum = Math.floor(index / 7) + 1;
+          
+          if (weekNum > currentWeek) {
+            weeks.push({ week: `W${currentWeek}`, streak: currentStreak });
+            currentWeek = weekNum;
+            currentStreak = 0;
+          }
+          
+          if (day.status === 'completed' || day.progressPercentage >= 100) {
+            currentStreak++;
+          }
+        });
+        
+        // Add the last week
+        if (currentStreak > 0 || weeks.length === 0) {
+          weeks.push({ week: `W${currentWeek}`, streak: currentStreak });
+        }
+        
+        // Ensure we have at least 4 weeks, pad with zeros if needed
+        while (weeks.length < 4) {
+          weeks.unshift({ week: `W${weeks.length + 1}`, streak: 0 });
+        }
+        
+        // Take only the last 4 weeks and renumber them
+        return weeks.slice(-4).map((w, i) => ({ week: `W${i + 1}`, streak: w.streak }));
+      })()
+    : [
+        { week: 'W1', streak: 3 },
+        { week: 'W2', streak: 5 },
+        { week: 'W3', streak: 7 },
+        { week: 'W4', streak: stats.currentStreak },
+      ];
 
   return (
     <div className="space-y-4">
