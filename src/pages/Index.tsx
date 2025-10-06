@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment } from '@/lib/storage';
+import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle } from '@/lib/storage';
 import { format } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import {
@@ -35,6 +35,7 @@ const Index = () => {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayKey());
   const [currentTab, setCurrentTab] = useState('today');
   const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
+  const [progressWheelStyle, setProgressWheelStyle] = useState(getProgressWheelStyle());
 
   // Get all drinks for today
   const allDrinks = todayRecord?.drinks || [];
@@ -164,6 +165,8 @@ const Index = () => {
                 goal={goal}
                 className="mb-4"
                 unit={unitPreference}
+                progressWheelStyle={progressWheelStyle}
+                drinks={allDrinks}
               />
               <HydrationStatus percentage={percentage} />
             </div>
@@ -217,7 +220,7 @@ const Index = () => {
               <div>
                 <h2 className="text-lg font-semibold mb-3">Today's Drinks</h2>
                 <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
-                  {allDrinks.map((drink) => {
+                  {[...allDrinks].reverse().map((drink) => {
                     const isCustom = drink.type === 'custom' && drink.customDrinkId;
                     const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
                     const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];

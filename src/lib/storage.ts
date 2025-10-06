@@ -1,4 +1,4 @@
-import { DayRecord, UserStats, Achievement, UserProfile, CustomDrinkType, VolumeUnit, WeightUnit, TemperatureUnit } from '@/types/water';
+import { DayRecord, UserStats, Achievement, UserProfile, CustomDrinkType, VolumeUnit, WeightUnit, TemperatureUnit, ProgressWheelStyle } from '@/types/water';
 import { getCachedWeather, calculateWeatherMultiplier, getWeatherForDate } from './weather';
 
 const STORAGE_KEYS = {
@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   TEMPERATURE_UNIT_PREFERENCE: 'archer_aqua_temperature_unit_preference',
   TIMEZONE: 'archer_aqua_timezone',
   USE_WEATHER_ADJUSTMENT: 'archer_aqua_use_weather_adjustment',
+  PROGRESS_WHEEL_STYLE: 'archer_aqua_progress_wheel_style',
 };
 
 export const DEFAULT_GOAL = 2500; // 2.5L in ml
@@ -358,3 +359,14 @@ export function getUseWeatherAdjustment(): boolean {
 export function saveUseWeatherAdjustment(useWeather: boolean): void {
   localStorage.setItem(STORAGE_KEYS.USE_WEATHER_ADJUSTMENT, useWeather.toString());
 }
+
+// Progress Wheel Style Preference
+export function getProgressWheelStyle(): ProgressWheelStyle {
+  const style = localStorage.getItem(STORAGE_KEYS.PROGRESS_WHEEL_STYLE);
+  return (style as ProgressWheelStyle) || 'drink-colors'; // Default to drink-colors
+}
+
+export function saveProgressWheelStyle(style: ProgressWheelStyle): void {
+  localStorage.setItem(STORAGE_KEYS.PROGRESS_WHEEL_STYLE, style);
+}
+

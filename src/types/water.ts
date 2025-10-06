@@ -3,6 +3,7 @@ export type DrinkType = 'water' | 'coffee' | 'tea' | 'juice' | 'alcohol' | 'soda
 export type VolumeUnit = 'ml' | 'oz';
 export type WeightUnit = 'kg' | 'lbs';
 export type TemperatureUnit = 'C' | 'F';
+export type ProgressWheelStyle = 'drink-colors' | 'black-white' | 'water-blue';
 
 export interface CustomDrinkType {
   id: string;

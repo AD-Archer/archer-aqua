@@ -10,8 +10,8 @@ import { Switch } from '@/components/ui/switch';
 import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord } from '@/lib/storage';
-import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius } from '@/types/water';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle } from '@/lib/storage';
+import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius, ProgressWheelStyle } from '@/types/water';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { WeatherCard } from '@/components/WeatherCard';
@@ -40,6 +40,7 @@ export default function Settings() {
   const [customDrinks, setCustomDrinks] = useState<CustomDrinkType[]>([]);
   const [isAddDrinkDialogOpen, setIsAddDrinkDialogOpen] = useState(false);
   const [useWeatherAdjustment, setUseWeatherAdjustment] = useState(true);
+  const [progressWheelStyle, setProgressWheelStyle] = useState<ProgressWheelStyle>('drink-colors');
   
   // Custom drink form state
   const [newDrinkName, setNewDrinkName] = useState('');
@@ -89,6 +90,9 @@ export default function Settings() {
     
     const weatherPref = getUseWeatherAdjustment();
     setUseWeatherAdjustment(weatherPref);
+    
+    const wheelStyle = getProgressWheelStyle();
+    setProgressWheelStyle(wheelStyle);
   }, [navigate]);
 
   const handleUpdateProfile = () => {
@@ -240,6 +244,12 @@ export default function Settings() {
     setUseWeatherAdjustment(enabled);
     saveUseWeatherAdjustment(enabled);
     toast.success(`Weather-based adjustment ${enabled ? 'enabled' : 'disabled'}`);
+  };
+
+  const handleProgressWheelStyleChange = (style: ProgressWheelStyle) => {
+    setProgressWheelStyle(style);
+    saveProgressWheelStyle(style);
+    toast.success(`Progress wheel style updated!`);
   };
 
   const handleWeatherUpdate = () => {
@@ -466,6 +476,53 @@ export default function Settings() {
                     <SelectItem value="F">Fahrenheit (°F)</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Progress Wheel Style */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Progress Wheel Style</CardTitle>
+              <CardDescription>
+                Customize how your progress wheel looks
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="progress-wheel-style">Wheel Style</Label>
+                <Select value={progressWheelStyle} onValueChange={(value: ProgressWheelStyle) => handleProgressWheelStyleChange(value)}>
+                  <SelectTrigger id="progress-wheel-style">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="drink-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-500 via-orange-500 to-green-500"></div>
+                        <span>Drink Colors (Default - Reflects what you drink)</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="water-blue">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"></div>
+                        <span>Water Blue</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="black-white">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-gradient-to-r from-black to-white"></div>
+                        <span>Black & White</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {progressWheelStyle === 'drink-colors' 
+                    ? 'The progress wheel will show different colors based on the drinks you consume'
+                    : progressWheelStyle === 'black-white'
+                    ? 'A simple monochrome gradient for the progress wheel'
+                    : 'Classic blue water gradient'}
+                </p>
               </div>
             </CardContent>
           </Card>
