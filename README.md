@@ -1,4 +1,34 @@
-# Welcome to your Lovable project
+# Welcome to Archer Aqua
+
+A modern, intelligent hydration tracking application with weather-based goal adjustments.
+
+## Features
+
+- 📊 **Personalized Hydration Goals**: Based on weight, age, activity level, and climate
+- 🌤️ **Weather Integration**: Automatically adjusts goals based on local weather conditions
+- 📅 **Calendar View**: Track your hydration history across days
+- 🏆 **Achievements**: Unlock badges as you build healthy habits
+- 🥤 **Custom Drinks**: Add your own beverages with custom hydration multipliers
+- 🌍 **Timezone Support**: Accurate tracking across different locations
+- 📱 **Responsive Design**: Works seamlessly on desktop and mobile
+
+## Weather-Based Hydration
+
+This app integrates with OpenWeatherMap to dynamically adjust your hydration goals based on:
+- Temperature (higher temps = more hydration needed)
+- Humidity levels (dry air increases needs)
+- Real-time local conditions
+
+### Setup Weather Integration
+
+1. Get a free API key from [OpenWeatherMap](https://openweathermap.org/api)
+2. Create a `.env` file in the root directory:
+   ```bash
+   VITE_OPENWEATHERMAP_API_KEY=your_api_key_here
+   ```
+3. Restart the development server
+
+For detailed documentation, see [WEATHER_INTEGRATION.md](./WEATHER_INTEGRATION.md)
 
 ## Project info
 

@@ -7,8 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit } from '@/types/water';
+import { getWeatherData } from '@/lib/weather';
+import { LocationPicker } from '@/components/LocationPicker';
 
 export default function ProfileSetup() {
   const navigate = useNavigate();
@@ -19,6 +21,9 @@ export default function ProfileSetup() {
   const [gender, setGender] = useState<Gender>('other');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
   const [climate, setClimate] = useState<'cold' | 'moderate' | 'hot'>('moderate');
+  const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [weatherEnabled, setWeatherEnabled] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -31,6 +36,11 @@ export default function ProfileSetup() {
 
     const savedTempUnit = getTemperatureUnitPreference();
     setTemperatureUnit(savedTempUnit);
+
+    // Check if weather is already enabled
+    const weatherAdjustment = getUseWeatherAdjustment();
+    setWeatherEnabled(weatherAdjustment);
+    setShowLocationPicker(weatherAdjustment);
 
     // Check if profile already exists
     const existingProfile = getUserProfile();
@@ -48,6 +58,37 @@ export default function ProfileSetup() {
       setWeight(savedWeightUnit === 'lbs' ? '154' : '70');
     }
   }, [navigate]);
+
+  const handleEnableWeather = async () => {
+    setIsLoadingWeather(true);
+    try {
+      await getWeatherData(false);
+      saveUseWeatherAdjustment(true);
+      setWeatherEnabled(true);
+      setShowLocationPicker(true);
+      toast.success('Weather tracking enabled! You can now configure your location below.');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to enable weather tracking';
+      toast.error(errorMessage);
+      saveUseWeatherAdjustment(false);
+      setWeatherEnabled(false);
+      // Still show location picker so user can set manual location
+      setShowLocationPicker(true);
+    } finally {
+      setIsLoadingWeather(false);
+    }
+  };
+
+  const handleLocationUpdate = () => {
+    toast.success('Location updated! Your hydration goals will be adjusted based on local weather.');
+  };
+
+  const handleDisableWeather = () => {
+    saveUseWeatherAdjustment(false);
+    setWeatherEnabled(false);
+    setShowLocationPicker(false);
+    toast.success('Weather tracking disabled');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,8 +130,9 @@ export default function ProfileSetup() {
     const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     saveTimezone(detectedTimezone);
     
-    // Calculate and save personalized goal
-    const personalizedGoal = calculatePersonalizedGoal(profile);
+    // Calculate and save personalized goal with weather adjustment if available
+    const useWeather = true; // Enable by default
+    const personalizedGoal = calculatePersonalizedGoal(profile, useWeather);
     saveDailyGoal(personalizedGoal);
     
     toast.success(`Your daily goal is set to ${(personalizedGoal / 1000).toFixed(1)}L`);
@@ -228,12 +270,51 @@ export default function ProfileSetup() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Your typical environment</p>
+              <p className="text-xs text-muted-foreground">
+                Your typical environment (used as fallback if weather tracking is disabled)
+              </p>
             </div>
 
             <Button type="submit" className="w-full bg-gradient-water">
               Calculate My Goal
             </Button>
+
+            <div className="pt-4 border-t space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <Label className="text-sm font-medium">Enable Weather Tracking (Optional)</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Get personalized goals based on your local weather conditions
+                  </p>
+                </div>
+              </div>
+              {!weatherEnabled ? (
+                <Button
+                  type="button"
+                  onClick={handleEnableWeather}
+                  disabled={isLoadingWeather}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {isLoadingWeather ? 'Enabling...' : 'Enable Weather Tracking'}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleDisableWeather}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Disable Weather Tracking
+                </Button>
+              )}
+              
+              {showLocationPicker && (
+                <div className="mt-4">
+                  <LocationPicker onLocationUpdate={handleLocationUpdate} />
+                </div>
+              )}
+            </div>
           </form>
         </CardContent>
       </Card>

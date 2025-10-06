@@ -1,4 +1,5 @@
 import { DayRecord, UserStats, Achievement, UserProfile, CustomDrinkType, VolumeUnit, WeightUnit, TemperatureUnit } from '@/types/water';
+import { getCachedWeather, calculateWeatherMultiplier, getWeatherForDate } from './weather';
 
 const STORAGE_KEYS = {
   DAYS: 'archer_aqua_days',
@@ -12,12 +13,13 @@ const STORAGE_KEYS = {
   WEIGHT_UNIT_PREFERENCE: 'archer_aqua_weight_unit_preference',
   TEMPERATURE_UNIT_PREFERENCE: 'archer_aqua_temperature_unit_preference',
   TIMEZONE: 'archer_aqua_timezone',
+  USE_WEATHER_ADJUSTMENT: 'archer_aqua_use_weather_adjustment',
 };
 
 export const DEFAULT_GOAL = 2500; // 2.5L in ml
 
 // Calculate personalized hydration goal based on user profile
-export function calculatePersonalizedGoal(profile: UserProfile): number {
+export function calculatePersonalizedGoal(profile: UserProfile, useWeatherAdjustment: boolean = true): number {
   // Base calculation: 35ml per kg of body weight
   let baseGoal = profile.weight * 35;
 
@@ -31,17 +33,91 @@ export function calculatePersonalizedGoal(profile: UserProfile): number {
   };
   baseGoal *= activityMultipliers[profile.activityLevel];
 
-  // Adjust for climate
-  const climateMultipliers = {
-    cold: 0.9,
-    moderate: 1.0,
-    hot: 1.2,
-  };
-  baseGoal *= climateMultipliers[profile.climate];
+  // Adjust for climate (only if not using weather adjustment)
+  if (!useWeatherAdjustment) {
+    const climateMultipliers = {
+      cold: 0.9,
+      moderate: 1.0,
+      hot: 1.2,
+    };
+    baseGoal *= climateMultipliers[profile.climate];
+  }
 
   // Adjust for age (older adults need slightly more)
   if (profile.age > 65) {
     baseGoal *= 1.1;
+  }
+
+  // Apply weather-based adjustment if enabled and weather data is available
+  if (useWeatherAdjustment) {
+    const cachedWeather = getCachedWeather();
+    if (cachedWeather) {
+      const weatherMultiplier = calculateWeatherMultiplier(cachedWeather.data);
+      baseGoal *= weatherMultiplier;
+    } else {
+      // Fallback to profile climate if no weather data
+      const climateMultipliers = {
+        cold: 0.9,
+        moderate: 1.0,
+        hot: 1.2,
+      };
+      baseGoal *= climateMultipliers[profile.climate];
+    }
+  }
+
+  // Round to nearest 100ml
+  return Math.round(baseGoal / 100) * 100;
+}
+
+// Calculate personalized hydration goal for a specific date
+export function calculatePersonalizedGoalForDate(
+  profile: UserProfile, 
+  date: string,
+  useWeatherAdjustment: boolean = true
+): number {
+  // Base calculation: 35ml per kg of body weight
+  let baseGoal = profile.weight * 35;
+
+  // Adjust for activity level
+  const activityMultipliers = {
+    sedentary: 1.0,
+    light: 1.1,
+    moderate: 1.2,
+    active: 1.3,
+    very_active: 1.5,
+  };
+  baseGoal *= activityMultipliers[profile.activityLevel];
+
+  // Adjust for climate (only if not using weather adjustment)
+  if (!useWeatherAdjustment) {
+    const climateMultipliers = {
+      cold: 0.9,
+      moderate: 1.0,
+      hot: 1.2,
+    };
+    baseGoal *= climateMultipliers[profile.climate];
+  }
+
+  // Adjust for age (older adults need slightly more)
+  if (profile.age > 65) {
+    baseGoal *= 1.1;
+  }
+
+  // Apply weather-based adjustment for specific date if enabled
+  if (useWeatherAdjustment) {
+    const weatherForDate = getWeatherForDate(date);
+    if (weatherForDate) {
+      const weatherMultiplier = calculateWeatherMultiplier(weatherForDate);
+      baseGoal *= weatherMultiplier;
+    } else {
+      // Fallback to profile climate if no weather data
+      const climateMultipliers = {
+        cold: 0.9,
+        moderate: 1.0,
+        hot: 1.2,
+      };
+      baseGoal *= climateMultipliers[profile.climate];
+    }
   }
 
   // Round to nearest 100ml
@@ -271,4 +347,14 @@ export function getTodayKeyInTimezone(timezone?: string): string {
   const tz = timezone || getTimezone();
   const date = new Date();
   return date.toLocaleDateString('en-CA', { timeZone: tz }); // en-CA gives YYYY-MM-DD format
+}
+
+// Weather Adjustment Preference
+export function getUseWeatherAdjustment(): boolean {
+  const preference = localStorage.getItem(STORAGE_KEYS.USE_WEATHER_ADJUSTMENT);
+  return preference === null ? true : preference === 'true'; // Default to true
+}
+
+export function saveUseWeatherAdjustment(useWeather: boolean): void {
+  localStorage.setItem(STORAGE_KEYS.USE_WEATHER_ADJUSTMENT, useWeather.toString());
 }

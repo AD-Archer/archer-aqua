@@ -8,12 +8,13 @@ import { AchievementCard } from '@/components/AchievementCard';
 import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
 import { CalendarView } from '@/components/CalendarView';
+import { WeatherCard } from '@/components/WeatherCard';
 import { DrinkType, formatVolume, DRINK_COLORS } from '@/types/water';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey } from '@/lib/storage';
+import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment } from '@/lib/storage';
 import { format } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import {
@@ -35,6 +36,7 @@ const Index = () => {
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
   const [selectedDate, setSelectedDate] = useState<string>(getTodayKey());
   const [currentTab, setCurrentTab] = useState('today');
+  const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
 
   useEffect(() => {
     if (!isAuthenticated()) {

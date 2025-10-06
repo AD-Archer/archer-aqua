@@ -6,12 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Droplet, ArrowLeft, LogOut, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius } from '@/types/water';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
+import { WeatherCard } from '@/components/WeatherCard';
+import { LocationPicker } from '@/components/LocationPicker';
+import { WeeklyWeatherView } from '@/components/WeeklyWeatherView';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -28,6 +32,7 @@ export default function Settings() {
   const [timezone, setTimezone] = useState('');
   const [customDrinks, setCustomDrinks] = useState<CustomDrinkType[]>([]);
   const [isAddDrinkDialogOpen, setIsAddDrinkDialogOpen] = useState(false);
+  const [useWeatherAdjustment, setUseWeatherAdjustment] = useState(true);
   
   // Custom drink form state
   const [newDrinkName, setNewDrinkName] = useState('');
@@ -69,6 +74,9 @@ export default function Settings() {
     
     const drinks = getCustomDrinks();
     setCustomDrinks(drinks);
+    
+    const weatherPref = getUseWeatherAdjustment();
+    setUseWeatherAdjustment(weatherPref);
   }, [navigate]);
 
   const handleUpdateProfile = () => {
@@ -109,7 +117,7 @@ export default function Settings() {
     saveTimezone(timezone);
     
     if (usePersonalizedGoal) {
-      const personalizedGoal = calculatePersonalizedGoal(profile);
+      const personalizedGoal = calculatePersonalizedGoal(profile, useWeatherAdjustment);
       saveDailyGoal(personalizedGoal);
       toast.success(`Profile updated! Daily goal: ${(personalizedGoal / 1000).toFixed(1)}L`);
     } else {
@@ -192,6 +200,48 @@ export default function Settings() {
     deleteCustomDrink(id);
     setCustomDrinks(customDrinks.filter(d => d.id !== id));
     toast.success(`Deleted "${drink?.name}"`);
+  };
+
+  const handleWeatherAdjustmentChange = (enabled: boolean) => {
+    setUseWeatherAdjustment(enabled);
+    saveUseWeatherAdjustment(enabled);
+    toast.success(`Weather-based adjustment ${enabled ? 'enabled' : 'disabled'}`);
+  };
+
+  const handleWeatherUpdate = () => {
+    // Recalculate goal when weather is updated
+    const profile = getUserProfile();
+    if (profile && usePersonalizedGoal) {
+      const personalizedGoal = calculatePersonalizedGoal(profile, useWeatherAdjustment);
+      saveDailyGoal(personalizedGoal);
+      
+      // Recalculate goals for all days in the past week
+      if (useWeatherAdjustment) {
+        const allDays = getAllDayRecords();
+        const today = new Date();
+        
+        // Update goals for past 7 days
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateKey = date.toISOString().split('T')[0];
+          
+          const dayRecord = allDays[dateKey];
+          if (dayRecord) {
+            const adjustedGoal = calculatePersonalizedGoalForDate(profile, dateKey, true);
+            dayRecord.goal = adjustedGoal;
+            saveDayRecord(dayRecord);
+          }
+        }
+        
+        toast.success('Hydration goals recalculated based on weather!');
+      }
+    }
+  };
+
+  const handleLocationUpdate = () => {
+    // Trigger weather update when location changes
+    handleWeatherUpdate();
   };
 
   return (
@@ -291,25 +341,30 @@ export default function Settings() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="climate">Climate</Label>
-                <Select value={climate} onValueChange={(value: 'cold' | 'moderate' | 'hot') => setClimate(value)}>
-                  <SelectTrigger id="climate">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cold">
-                      Cold (below {temperatureUnit === 'F' ? '59°F' : '15°C'})
-                    </SelectItem>
-                    <SelectItem value="moderate">
-                      Moderate ({temperatureUnit === 'F' ? '59-77°F' : '15-25°C'})
-                    </SelectItem>
-                    <SelectItem value="hot">
-                      Hot (above {temperatureUnit === 'F' ? '77°F' : '25°C'})
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!useWeatherAdjustment && (
+                <div className="space-y-2">
+                  <Label htmlFor="climate">Climate</Label>
+                  <Select value={climate} onValueChange={(value: 'cold' | 'moderate' | 'hot') => setClimate(value)}>
+                    <SelectTrigger id="climate">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cold">
+                        Cold (below {temperatureUnit === 'F' ? '59°F' : '15°C'})
+                      </SelectItem>
+                      <SelectItem value="moderate">
+                        Moderate ({temperatureUnit === 'F' ? '59-77°F' : '15-25°C'})
+                      </SelectItem>
+                      <SelectItem value="hot">
+                        Hot (above {temperatureUnit === 'F' ? '77°F' : '25°C'})
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Enable weather-based adjustments below for automatic climate detection
+                  </p>
+                </div>
+              )}
 
               <Button onClick={handleUpdateProfile} className="w-full bg-gradient-water">
                 Update Profile & Recalculate Goal
@@ -425,6 +480,42 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Weather-Based Hydration */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Weather-Based Adjustments</CardTitle>
+                  <CardDescription>
+                    {useWeatherAdjustment 
+                      ? 'Automatically adjust your hydration goals based on local weather conditions'
+                      : 'Enable weather tracking to automatically adjust your hydration goals based on local weather conditions'
+                    }
+                  </CardDescription>
+                </div>
+                <Switch
+                  checked={useWeatherAdjustment}
+                  onCheckedChange={handleWeatherAdjustmentChange}
+                />
+              </div>
+            </CardHeader>
+            {useWeatherAdjustment && (
+              <CardContent className="space-y-4">
+                <WeatherCard onWeatherUpdate={handleWeatherUpdate} />
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Location Settings - Only show when weather is enabled */}
+          {useWeatherAdjustment && (
+            <LocationPicker onLocationUpdate={handleLocationUpdate} />
+          )}
+
+          {/* Weekly Weather View - Only show when weather is enabled */}
+          {useWeatherAdjustment && (
+            <WeeklyWeatherView />
+          )}
 
           {/* Custom Drinks */}
           <Card>
