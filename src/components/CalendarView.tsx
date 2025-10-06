@@ -3,7 +3,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus, CheckCircle2, Circle } from 'lucide-react';
-import { getCustomDrinkById } from '@/lib/storage';
+import { getCustomDrinkById, getCustomDrinkByLabel } from '@/lib/storage';
 import { DrinkType, DRINK_COLORS, formatVolume, VolumeUnit, Drink, DayRecord, DailyHydrationSummary } from '@/types/water';
 import { format, parseISO } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
@@ -211,13 +211,15 @@ export function CalendarView({
           ) : (
             <div className="space-y-2">
               {drinks.slice().reverse().map((drink: Drink) => {
-                const isCustom = drink.type === 'custom' && drink.customDrinkId;
-                const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
+                const isCustom = drink.type === 'custom';
+                const customDrink = isCustom
+                  ? (drink.customDrinkId ? getCustomDrinkById(drink.customDrinkId) : null) ?? (drink.label ? getCustomDrinkByLabel(drink.label) : null)
+                  : null;
                 const baseColor = drink.type !== 'custom'
                   ? DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>]
                   : undefined;
                 const drinkColor = isCustom && customDrink ? customDrink.color : baseColor ?? '#0ea5e9';
-                const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
+                const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId, drink.label ?? customDrink?.name);
                 const drinkName = drink.label ?? (isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' '));
                 
                 return (

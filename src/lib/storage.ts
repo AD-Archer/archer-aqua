@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   DAYS: 'archer_aqua_days',
   STATS: 'archer_aqua_stats',
   GOAL: 'archer_aqua_goal',
+  GOAL_MODE: 'archer_aqua_goal_mode',
   USER: 'archer_aqua_user',
   PROFILE: 'archer_aqua_profile',
   IS_AUTHENTICATED: 'archer_aqua_auth',
@@ -261,6 +262,17 @@ export function saveDailyGoal(goal: number): void {
   localStorage.setItem(STORAGE_KEYS.GOAL, goal.toString());
 }
 
+export type GoalMode = 'personalized' | 'custom';
+
+export function getGoalMode(): GoalMode {
+  const mode = localStorage.getItem(STORAGE_KEYS.GOAL_MODE);
+  return mode === 'custom' ? 'custom' : 'personalized';
+}
+
+export function saveGoalMode(mode: GoalMode): void {
+  localStorage.setItem(STORAGE_KEYS.GOAL_MODE, mode);
+}
+
 function getDefaultAchievements(): Achievement[] {
   return [
     {
@@ -339,14 +351,46 @@ export function saveCustomDrink(drink: CustomDrinkType): void {
   localStorage.setItem(STORAGE_KEYS.CUSTOM_DRINKS, JSON.stringify(drinks));
 }
 
+export function replaceCustomDrinks(drinks: CustomDrinkType[]): void {
+  localStorage.setItem(STORAGE_KEYS.CUSTOM_DRINKS, JSON.stringify(drinks));
+}
+
+export function setCustomDrinksList(drinks: CustomDrinkType[]): void {
+  localStorage.setItem(STORAGE_KEYS.CUSTOM_DRINKS, JSON.stringify(drinks));
+}
+
 export function deleteCustomDrink(id: string): void {
   const drinks = getCustomDrinks().filter(d => d.id !== id);
   localStorage.setItem(STORAGE_KEYS.CUSTOM_DRINKS, JSON.stringify(drinks));
 }
 
+function normalizeDrinkName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
 export function getCustomDrinkById(id: string): CustomDrinkType | null {
   const drinks = getCustomDrinks();
-  return drinks.find(d => d.id === id) || null;
+  const matchById = drinks.find((d) => d.id === id);
+  if (matchById) {
+    return matchById;
+  }
+
+  const backendMap = getBackendDrinkMap();
+  const fallbackLabel = backendMap[id];
+  if (!fallbackLabel) {
+    return null;
+  }
+
+  return getCustomDrinkByLabel(fallbackLabel);
+}
+
+export function getCustomDrinkByLabel(label: string): CustomDrinkType | null {
+  if (!label) {
+    return null;
+  }
+  const normalized = normalizeDrinkName(label);
+  const drinks = getCustomDrinks();
+  return drinks.find((drink) => normalizeDrinkName(drink.name) === normalized) || null;
 }
 
 // Unit Preference Management

@@ -19,6 +19,7 @@ import {
   mapBackendStatsToUserStats,
   removeHydrationLogFromBackend,
   syncGoalToBackend,
+  syncCustomDrinksFromBackend,
 } from '@/lib/backend';
 import { resolveDrinkLabel } from '@/lib/api';
 
@@ -66,6 +67,7 @@ export function useWaterTracking() {
         fetchDayRecordFromBackend(today, timezone),
         fetchHydrationStatsFromBackend(timezone, 7),
       ]);
+      await syncCustomDrinksFromBackend();
 
       if (record) {
         setTodayRecord(record);
@@ -221,6 +223,7 @@ export function useWaterTracking() {
         fetchDayRecordFromBackend(today, timezone),
         fetchHydrationStatsFromBackend(timezone, 7),
       ]);
+      await syncCustomDrinksFromBackend();
 
       console.log('Raw API Response - record:', JSON.stringify(record, null, 2));
       console.log('Raw API Response - statsResponse:', JSON.stringify(statsResponse, null, 2));

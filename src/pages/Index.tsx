@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle, getUserProfile } from '@/lib/storage';
+import { isAuthenticated, getUnitPreference, getCustomDrinkById, getCustomDrinkByLabel, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle, getUserProfile } from '@/lib/storage';
 import { format, parseISO } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import { backendIsEnabled } from '@/lib/backend';
@@ -65,6 +65,14 @@ const Index = () => {
   };
 
   const recentUniqueDrinks = getUniqueRecentDrinks();
+
+  const resolveCustomDrink = (customDrinkId?: string, label?: string | null) => {
+    const byId = customDrinkId ? getCustomDrinkById(customDrinkId) : null;
+    if (byId) {
+      return byId;
+    }
+    return label ? getCustomDrinkByLabel(label) : null;
+  };
 
   useEffect(() => {
     const checkAuthAndProfile = async () => {
@@ -347,13 +355,13 @@ const Index = () => {
                 <h2 className="text-lg font-semibold mb-3">Quick Add Recent</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {recentUniqueDrinks.map((drink, index) => {
-                    const isCustom = drink.type === 'custom' && drink.customDrinkId;
-                    const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
+                    const isCustom = drink.type === 'custom';
+                    const customDrink = isCustom ? resolveCustomDrink(drink.customDrinkId, drink.label) : null;
                     const baseColor = drink.type !== 'custom'
                       ? DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>]
                       : undefined;
                     const drinkColor = isCustom && customDrink ? customDrink.color : baseColor ?? '#0ea5e9';
-                    const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
+                    const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId, drink.label ?? customDrink?.name);
                     const drinkName = drink.label ?? (isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' '));
                     
                     return (
@@ -384,13 +392,13 @@ const Index = () => {
                 <h2 className="text-lg font-semibold mb-3">Today's Drinks</h2>
                 <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
                   {[...allDrinks].reverse().map((drink) => {
-                    const isCustom = drink.type === 'custom' && drink.customDrinkId;
-                    const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
+                    const isCustom = drink.type === 'custom';
+                    const customDrink = isCustom ? resolveCustomDrink(drink.customDrinkId, drink.label) : null;
                     const baseColor = drink.type !== 'custom'
                       ? DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>]
                       : undefined;
                     const drinkColor = isCustom && customDrink ? customDrink.color : baseColor ?? '#0ea5e9';
-                    const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
+                    const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId, drink.label ?? customDrink?.name);
                     const drinkName = drink.label ?? (isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' '));
                     
                     return (

@@ -6,6 +6,7 @@ import {
   logHydration,
   deleteHydrationLog,
   updateUser,
+  listDrinks,
   type ApiDailySummaryResponse,
   type ApiHydrationLogResponse,
   type ApiHydrationStatsResponse,
@@ -21,13 +22,18 @@ import {
   getDailyGoal,
   getUseWeatherAdjustment,
   getCustomDrinkById,
+  getCustomDrinkByLabel,
   getProgressWheelStyle,
   getUnitPreference,
   getBackendDrinkMap,
   saveBackendDrinkMap,
+  getWeightUnitPreference,
+  getGoalMode,
+  replaceCustomDrinks,
+  getCustomDrinks,
 } from './storage';
 import { getLocationPreference } from './weather';
-import { DRINK_HYDRATION_MULTIPLIERS, Drink, DrinkType, DayRecord, UserStats } from '@/types/water';
+import { DRINK_HYDRATION_MULTIPLIERS, Drink, DrinkType, DayRecord, UserStats, kgToLbs, CustomDrinkType } from '@/types/water';
 
 const DEFAULT_PROGRESS_STYLE = 'drink_colors';
 
@@ -82,15 +88,21 @@ export async function syncProfileToBackend(): Promise<void> {
 
   const locationPreference = getLocationPreference();
   const preferredUnit = profile.preferredUnit ?? getUnitPreference() ?? 'ml';
+  const preferredWeightUnit = profile.preferredWeightUnit ?? getWeightUnitPreference() ?? 'kg';
   const temperaturePreference = profile.preferredTemperatureUnit ?? 'F';
   const goalMl = getDailyGoal();
+  const goalMode = getGoalMode();
   const displayName = profile.name || authUser?.name || authUser?.email?.split('@')[0] || '';
+
+  const weightForBackend = preferredWeightUnit === 'lbs'
+    ? kgToLbs(profile.weight)
+    : profile.weight;
 
   const payload = {
     displayName,
     weight: {
-      value: profile.weight,
-      unit: 'kg' as const,
+      value: weightForBackend,
+      unit: preferredWeightUnit,
     },
     age: profile.age,
     gender: profile.gender,
@@ -100,7 +112,7 @@ export async function syncProfileToBackend(): Promise<void> {
     temperatureUnit: temperaturePreference === 'F' ? 'fahrenheit' : 'celsius',
     progressWheelStyle: normalizeProgressStyle(getProgressWheelStyle() ?? DEFAULT_PROGRESS_STYLE),
     weatherAdjustmentsEnabled: getUseWeatherAdjustment(),
-    customGoalLiters: goalMl ? goalMl / 1000 : null,
+    customGoalLiters: goalMode === 'custom' && goalMl ? goalMl / 1000 : null,
     location: {
       city: locationPreference.type === 'manual' ? locationPreference.manualLocation?.name ?? '' : '',
       region: profile.climate,
@@ -111,6 +123,61 @@ export async function syncProfileToBackend(): Promise<void> {
   };
 
   await updateUser(userId, payload);
+}
+
+export async function syncCustomDrinksFromBackend(): Promise<CustomDrinkType[] | null> {
+  if (!backendIsEnabled()) {
+    return null;
+  }
+
+  const userId = await ensureBackendUser();
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    const drinks = await listDrinks(userId);
+    const existing = getCustomDrinks();
+    const existingById = new Map(existing.map((drink) => [drink.id, drink]));
+    const normalizeName = (name: string | null | undefined) =>
+      (name ?? '').trim().toLowerCase();
+    const existingByName = new Map(
+      existing.map((drink) => [normalizeName(drink.name), drink]),
+    );
+    const matchedLocalIds = new Set<string>();
+
+    const customDrinks = drinks
+      .filter((drink) => drink.source === 'custom' && !drink.archivedAt)
+      .map<CustomDrinkType>((drink) => {
+        const cachedById = existingById.get(drink.id);
+        const cachedByName = existingByName.get(normalizeName(drink.name));
+        const metadataSource = cachedById ?? cachedByName;
+        if (metadataSource) {
+          matchedLocalIds.add(metadataSource.id);
+        }
+        return {
+          id: drink.id,
+          name: metadataSource?.name ?? drink.name,
+          color: drink.colorHex ?? metadataSource?.color ?? '#0ea5e9',
+          hydrationMultiplier: drink.hydrationMultiplier ?? metadataSource?.hydrationMultiplier ?? 1,
+          icon: metadataSource?.icon ?? 'GlassWater',
+        };
+      });
+
+    const backendIds = new Set(customDrinks.map((drink) => drink.id));
+    const merged = [
+      ...customDrinks,
+      ...existing.filter(
+        (drink) => !backendIds.has(drink.id) && !matchedLocalIds.has(drink.id),
+      ),
+    ];
+
+    replaceCustomDrinks(merged);
+    return merged;
+  } catch (error) {
+    console.warn('Failed to sync custom drinks from backend', error);
+    return null;
+  }
 }
 
 export async function syncGoalToBackend(goalMl: number): Promise<void> {
@@ -144,11 +211,18 @@ export async function logHydrationToBackend(
 
   let hydrationMultiplier: number | undefined;
   let label = resolveDrinkLabel(type);
-  if (type === 'custom' && customDrinkId) {
-    const customDrink = getCustomDrinkById(customDrinkId);
+  let resolvedDrinkId: string | undefined;
+  if (type === 'custom') {
+    const byId = customDrinkId ? getCustomDrinkById(customDrinkId) : null;
+    const customDrink = byId ?? (label ? getCustomDrinkByLabel(label) : null);
     if (customDrink) {
       label = customDrink.name;
       hydrationMultiplier = customDrink.hydrationMultiplier;
+      if (customDrink.id && isUuid(customDrink.id)) {
+        resolvedDrinkId = customDrink.id;
+      }
+    } else if (customDrinkId && isUuid(customDrinkId)) {
+      resolvedDrinkId = customDrinkId;
     }
   } else {
     hydrationMultiplier = DRINK_HYDRATION_MULTIPLIERS[type as Exclude<DrinkType, 'custom'>];
@@ -164,6 +238,10 @@ export async function logHydrationToBackend(
     source: 'frontend',
   };
 
+  if (resolvedDrinkId) {
+    payload.drinkId = resolvedDrinkId;
+  }
+
   if (options?.consumedAt) {
     payload.consumedAt = options.consumedAt;
   }
@@ -178,6 +256,10 @@ export async function logHydrationToBackend(
   }
 
   return response;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
 }
 
 export async function removeHydrationLogFromBackend(logId: string): Promise<boolean> {

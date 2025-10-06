@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { VolumeUnit, formatVolume, ProgressWheelStyle, Drink, DRINK_COLORS } from '@/types/water';
-import { getCustomDrinkById } from '@/lib/storage';
+import { getCustomDrinkById, getCustomDrinkByLabel } from '@/lib/storage';
 
 interface CircularProgressProps {
   progress: number; // 0-100
@@ -66,10 +66,12 @@ export function CircularProgress({
     // Calculate cumulative hydration for each drink
     let cumulativeHydration = 0;
     const drinkSegments = drinks.map(drink => {
-      const isCustom = drink.type === 'custom' && drink.customDrinkId;
-      const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
-      const color = isCustom && customDrink 
-        ? customDrink.color 
+      const isCustom = drink.type === 'custom';
+      const customDrink = isCustom
+        ? (drink.customDrinkId ? getCustomDrinkById(drink.customDrinkId) : null) ?? (drink.label ? getCustomDrinkByLabel(drink.label) : null)
+        : null;
+      const color = isCustom && customDrink
+        ? customDrink.color
         : DRINK_COLORS[drink.type as Exclude<typeof drink.type, 'custom'>];
       
       const startPercent = (cumulativeHydration / goal) * 100;

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment, getBackendUserId, getUser } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment, getBackendUserId, getUser, saveGoalMode } from '@/lib/storage';
 import { backendIsEnabled, ensureBackendUser } from '@/lib/backend';
 import { getUser as getBackendUser, createUser as createBackendUser, getAuthState } from '@/lib/api';
 import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit } from '@/types/water';
@@ -157,6 +157,7 @@ export default function ProfileSetup() {
     // Calculate and save personalized goal
     const personalizedGoal = calculatePersonalizedGoal(profile, weatherEnabled);
     saveDailyGoal(personalizedGoal);
+    saveGoalMode('personalized');
 
     // Create profile in backend if enabled
     if (backendIsEnabled()) {
@@ -167,8 +168,8 @@ export default function ProfileSetup() {
           email: user?.email || '',
           displayName: user?.name || user?.email?.split('@')[0] || '',
           weight: {
-            value: weightInKg,
-            unit: 'kg' as const,
+            value: weightValue,
+            unit: weightUnit,
           },
           age: ageNum,
           gender: gender,

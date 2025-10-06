@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, Copy, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId, setCustomDrinksList, getGoalMode, saveGoalMode } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius, ProgressWheelStyle } from '@/types/water';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
@@ -111,14 +111,21 @@ export default function Settings() {
                 setHasPassword(backendUser.hasPassword);
                 setIsGoogleUser(backendUser.isGoogleUser);
                 setTwoFactorEnabled(backendUser.twoFactorEnabled);
-                
+
+                const backendWeightUnit = (backendUser.weightUnit as WeightUnit) || 'kg';
+                const weightInPreferredUnit = backendUser.weight;
+                const weightInKg = backendWeightUnit === 'lbs'
+                  ? lbsToKg(weightInPreferredUnit)
+                  : weightInPreferredUnit;
+
                 // Update local state from backend
-                setWeight(backendUser.weight.toFixed(1));
-                setWeightUnit((backendUser.weightUnit as WeightUnit) || 'kg');
+                setWeight(weightInPreferredUnit.toFixed(1));
+                setWeightUnit(backendWeightUnit);
+                saveWeightUnitPreference(backendWeightUnit);
                 setAge(backendUser.age.toString());
                 setGender(backendUser.gender as Gender);
                 setActivityLevel(backendUser.activityLevel as ActivityLevel);
-                
+
                 // Load custom drinks from backend
                 if (response.drinks) {
                   const backendCustomDrinks: CustomDrinkType[] = response.drinks
@@ -131,11 +138,9 @@ export default function Settings() {
                       icon: 'GlassWater', // Default icon since backend doesn't store icons yet
                     }));
                   setCustomDrinks(backendCustomDrinks);
-                  
-                  // Also update local storage to keep sync
-                  backendCustomDrinks.forEach(drink => saveCustomDrink(drink));
+                  setCustomDrinksList(backendCustomDrinks);
                 }
-                
+
                 // Set unit preferences from backend
                 const volumeUnitMap: Record<string, VolumeUnit> = {
                   'ml': 'ml',
@@ -165,23 +170,27 @@ export default function Settings() {
                 saveProgressWheelStyle(backendStyle);
                 
                 // Set goal from backend
-                const goalMl = backendUser.customGoalLiters 
-                  ? backendUser.customGoalLiters * 1000 
-                  : backendUser.dailyGoalLiters * 1000;
+                const hasCustomGoal = backendUser.customGoalLiters != null && backendUser.customGoalLiters > 0;
+                const goalLiters = hasCustomGoal && backendUser.customGoalLiters
+                  ? backendUser.customGoalLiters
+                  : backendUser.dailyGoalLiters;
+                const goalMl = Math.round(goalLiters * 1000);
                 saveDailyGoal(goalMl);
-                setManualGoal((goalMl / 1000).toFixed(1));
+                setManualGoal(goalLiters ? goalLiters.toFixed(1) : '');
+                setUsePersonalizedGoal(!hasCustomGoal);
+                saveGoalMode(hasCustomGoal ? 'custom' : 'personalized');
                 
                 // Update local profile storage
                 const profile: UserProfile = {
                   name: backendUser.displayName,
                   email: backendUser.email,
-                  weight: backendUser.weight,
+                  weight: weightInKg,
                   age: backendUser.age,
                   gender: backendUser.gender as Gender,
                   activityLevel: backendUser.activityLevel as ActivityLevel,
                   climate: 'moderate',
                   createdAt: new Date(backendUser.createdAt),
-                  preferredWeightUnit: (backendUser.weightUnit as WeightUnit) || 'kg',
+                  preferredWeightUnit: backendWeightUnit,
                   preferredTemperatureUnit: tempUnit,
                   timezone: backendUser.timezone,
                 };
@@ -230,6 +239,8 @@ export default function Settings() {
         
         const weatherPref = getUseWeatherAdjustment();
         setUseWeatherAdjustment(weatherPref);
+        const goalMode = getGoalMode();
+        setUsePersonalizedGoal(goalMode === 'personalized');
         
         const wheelStyle = getProgressWheelStyle();
         setProgressWheelStyle(wheelStyle);
@@ -277,10 +288,24 @@ export default function Settings() {
     saveWeightUnitPreference(weightUnit);
     saveTemperatureUnitPreference(temperatureUnit);
     saveTimezone(timezone);
-    
+
+    let personalizedGoalMl: number | null = null;
+    let customGoalLiters: number | null = null;
+
     if (usePersonalizedGoal) {
-      const personalizedGoal = calculatePersonalizedGoal(profile, useWeatherAdjustment);
-      saveDailyGoal(personalizedGoal);
+      personalizedGoalMl = calculatePersonalizedGoal(profile, useWeatherAdjustment);
+      saveDailyGoal(personalizedGoalMl);
+      setManualGoal((personalizedGoalMl / 1000).toFixed(1));
+      saveGoalMode('personalized');
+    } else {
+      const manualGoalValue = parseFloat(manualGoal);
+      if (Number.isNaN(manualGoalValue) || manualGoalValue < 0.5 || manualGoalValue > 10) {
+        toast.error('Please enter a valid custom goal (0.5 - 10L)');
+        return;
+      }
+      customGoalLiters = manualGoalValue;
+      saveDailyGoal(customGoalLiters * 1000);
+      saveGoalMode('custom');
     }
 
     // Sync to backend if enabled
@@ -303,7 +328,7 @@ export default function Settings() {
             temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
             progressWheelStyle: progressWheelStyle.replace('-', '_'),
             weatherAdjustmentsEnabled: useWeatherAdjustment,
-            customGoalLiters: usePersonalizedGoal ? null : parseFloat(manualGoal)
+            customGoalLiters: customGoalLiters,
           });
         }
         await syncProfileToBackend();
@@ -313,12 +338,14 @@ export default function Settings() {
         toast.warning('Profile updated locally, but failed to sync with server');
       }
     } else {
-      if (usePersonalizedGoal) {
-        const personalizedGoal = calculatePersonalizedGoal(profile, useWeatherAdjustment);
-        toast.success(`Profile updated! Daily goal: ${(personalizedGoal / 1000).toFixed(1)}L`);
-      } else {
-        toast.success('Profile updated!');
-      }
+      const goalLitersForMessage = usePersonalizedGoal
+        ? (personalizedGoalMl ?? 0) / 1000
+        : customGoalLiters;
+      toast.success(
+        goalLitersForMessage
+          ? `Profile updated! Daily goal: ${goalLitersForMessage.toFixed(1)}L`
+          : 'Profile updated!'
+      );
     }
   };
 
@@ -333,15 +360,32 @@ export default function Settings() {
     setWeightUnit(newUnit);
   };
 
-  const handleUpdateManualGoal = () => {
-    const goalInMl = parseFloat(manualGoal) * 1000;
-    if (goalInMl > 0 && goalInMl <= 10000) {
-      saveDailyGoal(goalInMl);
-      setUsePersonalizedGoal(false);
-      toast.success('Daily goal updated!');
-    } else {
+  const handleUpdateManualGoal = async () => {
+    const manualGoalValue = parseFloat(manualGoal);
+    if (Number.isNaN(manualGoalValue) || manualGoalValue < 0.5 || manualGoalValue > 10) {
       toast.error('Please enter a valid goal (0.5 - 10L)');
+      return;
     }
+
+    const goalInMl = manualGoalValue * 1000;
+    saveDailyGoal(goalInMl);
+    setUsePersonalizedGoal(false);
+    saveGoalMode('custom');
+
+    if (backendIsEnabled() && isAuthenticated()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          await updateBackendUser(userId, { customGoalLiters: manualGoalValue });
+        }
+      } catch (error) {
+        console.error('Failed to sync custom goal to backend', error);
+        toast.warning('Custom goal saved locally, but failed to sync with server');
+        return;
+      }
+    }
+
+    toast.success('Daily goal updated!');
   };
 
   const handleLogout = () => {
@@ -438,9 +482,10 @@ export default function Settings() {
           newDrink.id = backendDrink.id;
         }
       }
-      
-      saveCustomDrink(newDrink);
-      setCustomDrinks([...customDrinks, newDrink]);
+
+      const updatedDrinks = [...customDrinks, newDrink];
+      setCustomDrinks(updatedDrinks);
+      setCustomDrinksList(updatedDrinks);
       toast.success(`Custom drink "${newDrink.name}" added!`);
     } catch (error) {
       console.error('Failed to create drink:', error);
@@ -466,12 +511,11 @@ export default function Settings() {
         if (userId) {
           await deleteDrink(userId, id);
         }
-      } else {
-        // Fallback to local storage
-        deleteCustomDrink(id);
       }
-      
-      setCustomDrinks(customDrinks.filter(d => d.id !== id));
+
+      const updatedDrinks = customDrinks.filter(d => d.id !== id);
+      setCustomDrinks(updatedDrinks);
+      setCustomDrinksList(updatedDrinks);
       toast.success(`Deleted "${drink?.name}"`);
     } catch (error) {
       console.error('Failed to delete drink:', error);
@@ -506,8 +550,9 @@ export default function Settings() {
         }
       }
 
-      saveCustomDrink(editingDrink);
-      setCustomDrinks(customDrinks.map(d => d.id === editingDrink.id ? editingDrink : d));
+    const updatedDrinks = customDrinks.map(d => d.id === editingDrink.id ? editingDrink : d);
+    setCustomDrinks(updatedDrinks);
+    setCustomDrinksList(updatedDrinks);
       toast.success(`Updated "${editingDrink.name}"`);
     } catch (error) {
       console.error('Failed to update drink:', error);
