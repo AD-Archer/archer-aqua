@@ -77,10 +77,18 @@ type UserResponse struct {
 	LastLoginAt               *time.Time      `json:"lastLoginAt"`
 	CreatedAt                 time.Time       `json:"createdAt"`
 	UpdatedAt                 time.Time       `json:"updatedAt"`
-	PoliciesAcceptedVersion   *string         `json:"policiesAcceptedVersion"`
-	PoliciesAcceptedAt        *time.Time      `json:"policiesAcceptedAt"`
-	PoliciesCurrentVersion    string          `json:"policiesCurrentVersion"`
-	RequiresPolicyAcceptance  bool            `json:"requiresPolicyAcceptance"`
+	PrivacyAcceptedVersion    *string         `json:"privacyAcceptedVersion"`
+	PrivacyAcceptedAt         *time.Time      `json:"privacyAcceptedAt"`
+	TermsAcceptedVersion      *string         `json:"termsAcceptedVersion"`
+	TermsAcceptedAt           *time.Time      `json:"termsAcceptedAt"`
+	PrivacyCurrentVersion     string          `json:"privacyCurrentVersion"`
+	TermsCurrentVersion       string          `json:"termsCurrentVersion"`
+	RequiresPrivacyAcceptance bool            `json:"requiresPrivacyAcceptance"`
+	RequiresTermsAcceptance   bool            `json:"requiresTermsAcceptance"`
+	PoliciesAcceptedVersion   *string         `json:"policiesAcceptedVersion"`  // Backward compatibility
+	PoliciesAcceptedAt        *time.Time      `json:"policiesAcceptedAt"`       // Backward compatibility
+	PoliciesCurrentVersion    string          `json:"policiesCurrentVersion"`   // Backward compatibility
+	RequiresPolicyAcceptance  bool            `json:"requiresPolicyAcceptance"` // Backward compatibility
 }
 
 type UserSummaryResponse struct {
@@ -88,7 +96,7 @@ type UserSummaryResponse struct {
 	Drinks []DrinkResponse `json:"drinks"`
 }
 
-func NewUserResponse(user models.User, currentPoliciesVersion string) UserResponse {
+func NewUserResponse(user models.User, currentPrivacyVersion, currentTermsVersion string) UserResponse {
 	// Convert weight back to user's preferred unit, fallback to kg if conversion fails
 	weightInPreferredUnit := user.WeightKg
 	if user.WeightUnit != "" {
@@ -127,9 +135,17 @@ func NewUserResponse(user models.User, currentPoliciesVersion string) UserRespon
 		LastLoginAt:               user.LastLoginAt,
 		CreatedAt:                 user.CreatedAt,
 		UpdatedAt:                 user.UpdatedAt,
-		PoliciesAcceptedVersion:   user.PoliciesAcceptedVersion,
-		PoliciesAcceptedAt:        user.PoliciesAcceptedAt,
-		PoliciesCurrentVersion:    currentPoliciesVersion,
-		RequiresPolicyAcceptance:  strings.TrimSpace(currentPoliciesVersion) != "" && (user.PoliciesAcceptedVersion == nil || *user.PoliciesAcceptedVersion != currentPoliciesVersion),
+		PrivacyAcceptedVersion:    user.PrivacyAcceptedVersion,
+		PrivacyAcceptedAt:         user.PrivacyAcceptedAt,
+		TermsAcceptedVersion:      user.TermsAcceptedVersion,
+		TermsAcceptedAt:           user.TermsAcceptedAt,
+		PrivacyCurrentVersion:     currentPrivacyVersion,
+		TermsCurrentVersion:       currentTermsVersion,
+		RequiresPrivacyAcceptance: strings.TrimSpace(currentPrivacyVersion) != "" && (user.PrivacyAcceptedVersion == nil || *user.PrivacyAcceptedVersion != currentPrivacyVersion),
+		RequiresTermsAcceptance:   strings.TrimSpace(currentTermsVersion) != "" && (user.TermsAcceptedVersion == nil || *user.TermsAcceptedVersion != currentTermsVersion),
+		PoliciesAcceptedVersion:   user.PrivacyAcceptedVersion,                                                                                                                                                                                                                                                                // Backward compatibility
+		PoliciesAcceptedAt:        user.PrivacyAcceptedAt,                                                                                                                                                                                                                                                                     // Backward compatibility
+		PoliciesCurrentVersion:    currentPrivacyVersion,                                                                                                                                                                                                                                                                      // Backward compatibility
+		RequiresPolicyAcceptance:  strings.TrimSpace(currentPrivacyVersion) != "" && (user.PrivacyAcceptedVersion == nil || *user.PrivacyAcceptedVersion != currentPrivacyVersion) || strings.TrimSpace(currentTermsVersion) != "" && (user.TermsAcceptedVersion == nil || *user.TermsAcceptedVersion != currentTermsVersion), // Backward compatibility
 	}
 }

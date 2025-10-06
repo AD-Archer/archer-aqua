@@ -1,11 +1,13 @@
 package dto
 
 type RegisterRequest struct {
-	Email           string `json:"email"`
-	Password        string `json:"password"`
-	DisplayName     string `json:"displayName"`
-	AcceptPolicies  bool   `json:"acceptPolicies"`
-	PoliciesVersion string `json:"policiesVersion"`
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	DisplayName    string `json:"displayName"`
+	AcceptPrivacy  bool   `json:"acceptPrivacy"`
+	AcceptTerms    bool   `json:"acceptTerms"`
+	PrivacyVersion string `json:"privacyVersion"`
+	TermsVersion   string `json:"termsVersion"`
 }
 
 type LoginRequest struct {

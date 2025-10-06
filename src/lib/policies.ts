@@ -1,7 +1,13 @@
-export const DEFAULT_POLICIES_VERSION = '2025-01-01';
-// year month day
-export const CURRENT_POLICIES_VERSION =
-  import.meta.env.VITE_POLICIES_VERSION?.trim() || DEFAULT_POLICIES_VERSION;
+export const DEFAULT_PRIVACY_VERSION = '2025-01-01';
+export const DEFAULT_TERMS_VERSION = '2025-01-01';
+export const CURRENT_PRIVACY_VERSION =
+  import.meta.env.VITE_PRIVACY_VERSION || DEFAULT_PRIVACY_VERSION;
+export const CURRENT_TERMS_VERSION =
+  import.meta.env.VITE_TERMS_VERSION || DEFAULT_TERMS_VERSION;
+
+// Backward compatibility
+export const DEFAULT_POLICIES_VERSION = DEFAULT_PRIVACY_VERSION;
+export const CURRENT_POLICIES_VERSION = CURRENT_PRIVACY_VERSION;
 
 export const PRIVACY_ROUTE = '/privacy';
 export const TERMS_ROUTE = '/terms';

@@ -9,7 +9,13 @@ import ProfileSetup from "./pages/ProfileSetup";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
 import VerifyEmail from "./pages/VerifyEmail";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
+import Error from "./pages/Error";
+import DatabaseConnectionError from "./pages/DatabaseConnectionError";
+import { PRIVACY_ROUTE, TERMS_ROUTE } from "./lib/policies";
+import { SiteFooter } from "./components/SiteFooter";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +32,10 @@ const App = () => (
           <Route path="/app" element={<Index />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path={PRIVACY_ROUTE} element={<Privacy />} />
+          <Route path={TERMS_ROUTE} element={<Terms />} />
+          <Route path="/error" element={<Error />} />
+          <Route path="/connection-error" element={<DatabaseConnectionError />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -74,7 +74,7 @@ func NewAuthService(db *gorm.DB, cfg config.Config) *AuthService {
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password, displayName string, acceptedPolicies bool, acceptedVersion string) (*models.User, string, bool, error) {
+func (s *AuthService) Register(ctx context.Context, email, password, displayName string, acceptedPrivacy, acceptedTerms bool, privacyVersion, termsVersion string) (*models.User, string, bool, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" {
 		return nil, "", false, fmt.Errorf("email is required")
@@ -92,17 +92,30 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 		}
 	}
 
-	if !acceptedPolicies {
-		return nil, "", false, ErrPoliciesNotAccepted
+	if !acceptedPrivacy {
+		return nil, "", false, fmt.Errorf("you must accept the latest privacy policy")
 	}
 
-	acceptedVersion = strings.TrimSpace(acceptedVersion)
-	if acceptedVersion == "" {
-		return nil, "", false, ErrPolicyVersionMismatch
+	if !acceptedTerms {
+		return nil, "", false, fmt.Errorf("you must accept the latest terms of service")
 	}
 
-	if acceptedVersion != strings.TrimSpace(s.cfg.PoliciesVersion) {
-		return nil, "", false, ErrPolicyVersionMismatch
+	privacyVersion = strings.TrimSpace(privacyVersion)
+	if privacyVersion == "" {
+		return nil, "", false, fmt.Errorf("privacy version is required")
+	}
+
+	termsVersion = strings.TrimSpace(termsVersion)
+	if termsVersion == "" {
+		return nil, "", false, fmt.Errorf("terms version is required")
+	}
+
+	if privacyVersion != strings.TrimSpace(s.cfg.PrivacyVersion) {
+		return nil, "", false, fmt.Errorf("privacy version mismatch")
+	}
+
+	if termsVersion != strings.TrimSpace(s.cfg.TermsVersion) {
+		return nil, "", false, fmt.Errorf("terms version mismatch")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -143,8 +156,10 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 		}
 
 		now := time.Now().UTC()
-		user.PoliciesAcceptedVersion = &acceptedVersion
-		user.PoliciesAcceptedAt = &now
+		user.PrivacyAcceptedVersion = &privacyVersion
+		user.PrivacyAcceptedAt = &now
+		user.TermsAcceptedVersion = &termsVersion
+		user.TermsAcceptedAt = &now
 
 		if err := tx.Save(&user).Error; err != nil {
 			return err
@@ -438,28 +453,65 @@ func ProfileIsComplete(user models.User) bool {
 	return profileIsComplete(user)
 }
 
-func (s *AuthService) RequiresPolicyAcceptance(user models.User) bool {
-	version := strings.TrimSpace(s.cfg.PoliciesVersion)
+func (s *AuthService) RequiresPrivacyAcceptance(user models.User) bool {
+	version := strings.TrimSpace(s.cfg.PrivacyVersion)
 	if version == "" {
 		return false
 	}
-	if user.PoliciesAcceptedVersion == nil {
+	if user.PrivacyAcceptedVersion == nil {
 		return true
 	}
-	return *user.PoliciesAcceptedVersion != version
+	return *user.PrivacyAcceptedVersion != version
 }
 
-func (s *AuthService) CurrentPoliciesVersion() string {
-	return s.cfg.PoliciesVersion
+func (s *AuthService) RequiresTermsAcceptance(user models.User) bool {
+	version := strings.TrimSpace(s.cfg.TermsVersion)
+	if version == "" {
+		return false
+	}
+	if user.TermsAcceptedVersion == nil {
+		return true
+	}
+	return *user.TermsAcceptedVersion != version
+}
+
+func (s *AuthService) CurrentPrivacyVersion() string {
+	return s.cfg.PrivacyVersion
+}
+
+func (s *AuthService) CurrentTermsVersion() string {
+	return s.cfg.TermsVersion
 }
 
 func (s *AuthService) AcceptPolicies(ctx context.Context, userID uuid.UUID, version string) (*models.User, error) {
+	// For backward compatibility, accept both privacy and terms with the same version
+	user, err := s.AcceptPrivacy(ctx, userID, version)
+	if err != nil {
+		return nil, err
+	}
+	user, err = s.AcceptTerms(ctx, userID, version)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) CurrentPoliciesVersion() string {
+	// For backward compatibility, return privacy version
+	return s.cfg.PrivacyVersion
+}
+
+func (s *AuthService) RequiresPolicyAcceptance(user models.User) bool {
+	return s.RequiresPrivacyAcceptance(user) || s.RequiresTermsAcceptance(user)
+}
+
+func (s *AuthService) AcceptPrivacy(ctx context.Context, userID uuid.UUID, version string) (*models.User, error) {
 	version = strings.TrimSpace(version)
 	if version == "" {
-		return nil, ErrPolicyVersionMismatch
+		return nil, fmt.Errorf("privacy version is required")
 	}
-	if version != strings.TrimSpace(s.cfg.PoliciesVersion) {
-		return nil, ErrPolicyVersionMismatch
+	if version != strings.TrimSpace(s.cfg.PrivacyVersion) {
+		return nil, fmt.Errorf("privacy version mismatch")
 	}
 
 	var user models.User
@@ -471,10 +523,37 @@ func (s *AuthService) AcceptPolicies(ctx context.Context, userID uuid.UUID, vers
 	}
 
 	now := time.Now().UTC()
-	user.PoliciesAcceptedVersion = &version
-	user.PoliciesAcceptedAt = &now
+	user.PrivacyAcceptedVersion = &version
+	user.PrivacyAcceptedAt = &now
 	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
-		return nil, fmt.Errorf("update policy acceptance: %w", err)
+		return nil, fmt.Errorf("update privacy acceptance: %w", err)
+	}
+
+	return &user, nil
+}
+
+func (s *AuthService) AcceptTerms(ctx context.Context, userID uuid.UUID, version string) (*models.User, error) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return nil, fmt.Errorf("terms version is required")
+	}
+	if version != strings.TrimSpace(s.cfg.TermsVersion) {
+		return nil, fmt.Errorf("terms version mismatch")
+	}
+
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	user.TermsAcceptedVersion = &version
+	user.TermsAcceptedAt = &now
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return nil, fmt.Errorf("update terms acceptance: %w", err)
 	}
 
 	return &user, nil

@@ -52,7 +52,7 @@ func (api *API) CreateUser(w http.ResponseWriter, r *http.Request) {
 		drinkResponses = append(drinkResponses, dto.NewDrinkResponse(drink))
 	}
 
-	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	respondJSON(w, http.StatusCreated, dto.UserSummaryResponse{
 		User:   userResponse,
 		Drinks: drinkResponses,
@@ -89,7 +89,7 @@ func (api *API) GetUser(w http.ResponseWriter, r *http.Request) {
 		drinkResponses = append(drinkResponses, dto.NewDrinkResponse(drink))
 	}
 
-	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	respondJSON(w, http.StatusOK, dto.UserSummaryResponse{
 		User:   userResponse,
 		Drinks: drinkResponses,
@@ -120,7 +120,7 @@ func (api *API) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion()))
+	respondJSON(w, http.StatusOK, dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion()))
 }
 
 func (api *API) DeleteUserAccount(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +154,7 @@ func (api *API) ExportUserData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := api.users.ExportUserData(r.Context(), userID, api.auth.CurrentPoliciesVersion())
+	data, err := api.users.ExportUserData(r.Context(), userID, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	if err != nil {
 		logError(api.logger, "export user data", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
@@ -187,7 +187,7 @@ func (api *API) ImportUserData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := api.users.ExportUserData(r.Context(), userID, api.auth.CurrentPoliciesVersion())
+	data, err := api.users.ExportUserData(r.Context(), userID, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	if err != nil {
 		logError(api.logger, "refresh export after import", err)
 		respondError(w, http.StatusInternalServerError, err.Error())

@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, Copy, type LucideIcon } from 'lucide-react';
+import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, Copy, Download, UserX, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId, setCustomDrinksList, getGoalMode, saveGoalMode } from '@/lib/storage';
@@ -20,7 +20,24 @@ import { WeatherCard } from '@/components/WeatherCard';
 import { LocationPicker } from '@/components/LocationPicker';
 import { WeeklyWeatherView } from '@/components/WeeklyWeatherView';
 import { backendIsEnabled, ensureBackendUser, syncProfileToBackend } from '@/lib/backend';
-import { getUser as getBackendUser, updateUser as updateBackendUser, getAuthState, deleteDrink, createDrink, updateDrink, isApiEnabled, changePassword, setPassword, removePassword, sendEmailVerification, enable2FA, verify2FA, disable2FA } from '@/lib/api';
+import {
+  getUser as getBackendUser,
+  updateUser as updateBackendUser,
+  getAuthState,
+  deleteDrink,
+  createDrink,
+  updateDrink,
+  isApiEnabled,
+  changePassword,
+  setPassword,
+  removePassword,
+  sendEmailVerification,
+  enable2FA,
+  verify2FA,
+  disable2FA,
+  deleteUserAccount,
+  exportUserData,
+} from '@/lib/api';
 import { getLocationPreference } from '@/lib/weather';
 
 const CUSTOM_DRINK_ICONS = [
@@ -75,6 +92,9 @@ export default function Settings() {
   // Edit drink state
   const [editingDrink, setEditingDrink] = useState<CustomDrinkType | null>(null);
   const [isEditDrinkDialogOpen, setIsEditDrinkDialogOpen] = useState(false);
+  const [isExportingData, setIsExportingData] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const backendAvailable = backendIsEnabled() && isApiEnabled();
 
   useEffect(() => {
     const checkAuthAndLoadProfile = async () => {
@@ -392,6 +412,72 @@ export default function Settings() {
     logout();
     toast.success('Logged out successfully');
     navigate('/');
+  };
+
+  const handleExportUserData = async () => {
+    if (!backendAvailable) {
+      toast.info('Connect to the backend service to export your hydration data.');
+      return;
+    }
+
+    const userId = getBackendUserId();
+    if (!userId) {
+      toast.error('We could not find your account. Try signing in again.');
+      return;
+    }
+
+    setIsExportingData(true);
+    try {
+      const data = await exportUserData(userId);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `archer-aqua-export-${timestamp}.json`;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Your hydration data export is ready.');
+    } catch (error) {
+      console.error('Failed to export user data', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export your data');
+    } finally {
+      setIsExportingData(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!backendAvailable) {
+      toast.info('Account deletion requires the backend service.');
+      return;
+    }
+
+    const userId = getBackendUserId();
+    if (!userId) {
+      toast.error('We could not verify your account. Try signing in again.');
+      return;
+    }
+
+    const confirmed = window.confirm('This will permanently delete your account and hydration history. This action cannot be undone.');
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    try {
+      await deleteUserAccount(userId);
+      toast.success('Your account has been deleted.');
+      logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Failed to delete account', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete your account');
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   const handleUnitChange = async (unit: VolumeUnit) => {
@@ -1457,8 +1543,34 @@ export default function Settings() {
             <CardHeader>
               <CardTitle>Account</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Button onClick={handleLogout} variant="destructive" className="w-full">
+            <CardContent className="space-y-3">
+              {backendAvailable ? (
+                <>
+                  <Button
+                    onClick={handleExportUserData}
+                    variant="outline"
+                    className="w-full"
+                    disabled={isExportingData}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {isExportingData ? 'Preparing export...' : 'Download Data Export'}
+                  </Button>
+                  <Button
+                    onClick={handleDeleteAccount}
+                    variant="destructive"
+                    className="w-full"
+                    disabled={isDeletingAccount}
+                  >
+                    <UserX className="h-4 w-4 mr-2" />
+                    {isDeletingAccount ? 'Deleting account...' : 'Delete Account'}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Connect to the Archer Aqua backend to export or delete your synced account.
+                </p>
+              )}
+              <Button onClick={handleLogout} variant="outline" className="w-full">
                 <LogOut className="h-4 w-4 mr-2" />
                 Log Out
               </Button>

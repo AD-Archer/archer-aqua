@@ -19,12 +19,12 @@ func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, hasProfile, err := api.auth.Register(r.Context(), request.Email, request.Password, request.DisplayName, request.AcceptPolicies, request.PoliciesVersion)
+	user, token, hasProfile, err := api.auth.Register(r.Context(), request.Email, request.Password, request.DisplayName, request.AcceptPrivacy, request.AcceptTerms, request.PrivacyVersion, request.TermsVersion)
 	if err != nil {
 		switch {
-		case err == services.ErrUserAlreadyExists:
-			respondError(w, http.StatusConflict, err.Error())
-		case err == services.ErrPoliciesNotAccepted, err == services.ErrPolicyVersionMismatch:
+		case strings.Contains(err.Error(), "privacy"):
+			respondError(w, http.StatusBadRequest, err.Error())
+		case strings.Contains(err.Error(), "terms"):
 			respondError(w, http.StatusBadRequest, err.Error())
 		default:
 			logError(api.logger, "register user", err)
@@ -33,13 +33,13 @@ func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	respondJSON(w, http.StatusCreated, dto.AuthResponse{
 		Token:                    token,
 		User:                     userResponse,
 		HasProfile:               hasProfile,
-		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
-		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
+		RequiresPolicyAcceptance: userResponse.RequiresPrivacyAcceptance || userResponse.RequiresTermsAcceptance,
+		PoliciesVersion:          userResponse.PrivacyCurrentVersion, // For backward compatibility
 	})
 }
 
@@ -70,13 +70,13 @@ func (api *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	respondJSON(w, http.StatusOK, dto.AuthResponse{
 		Token:                    token,
 		User:                     userResponse,
 		HasProfile:               hasProfile,
-		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
-		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
+		RequiresPolicyAcceptance: userResponse.RequiresPrivacyAcceptance || userResponse.RequiresTermsAcceptance,
+		PoliciesVersion:          userResponse.PrivacyCurrentVersion, // For backward compatibility
 	})
 }
 
@@ -99,12 +99,12 @@ func (api *API) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	respondJSON(w, http.StatusOK, dto.AuthStateResponse{
 		User:                     userResponse,
 		HasProfile:               services.ProfileIsComplete(*user),
-		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
-		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
+		RequiresPolicyAcceptance: userResponse.RequiresPrivacyAcceptance || userResponse.RequiresTermsAcceptance,
+		PoliciesVersion:          userResponse.PrivacyCurrentVersion, // For backward compatibility
 	})
 }
 
@@ -139,7 +139,7 @@ func (api *API) AcceptPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
 	respondJSON(w, http.StatusOK, dto.AuthStateResponse{
 		User:                     userResponse,
 		HasProfile:               services.ProfileIsComplete(*user),
@@ -467,4 +467,64 @@ func (api *API) Disable2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Two-factor authentication disabled successfully"})
+}
+
+func (api *API) AcceptPrivacy(w http.ResponseWriter, r *http.Request) {
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid token subject")
+		return
+	}
+
+	var request dto.AcceptPoliciesRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	user, err := api.auth.AcceptPrivacy(r.Context(), userID, request.Version)
+	if err != nil {
+		logError(api.logger, "accept privacy", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
+	respondJSON(w, http.StatusOK, userResponse)
+}
+
+func (api *API) AcceptTerms(w http.ResponseWriter, r *http.Request) {
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid token subject")
+		return
+	}
+
+	var request dto.AcceptPoliciesRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	user, err := api.auth.AcceptTerms(r.Context(), userID, request.Version)
+	if err != nil {
+		logError(api.logger, "accept terms", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
+	respondJSON(w, http.StatusOK, userResponse)
 }

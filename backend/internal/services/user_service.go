@@ -171,7 +171,7 @@ func (s *UserService) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	})
 }
 
-func (s *UserService) ExportUserData(ctx context.Context, userID uuid.UUID, policiesVersion string) (*dto.UserDataExport, error) {
+func (s *UserService) ExportUserData(ctx context.Context, userID uuid.UUID, privacyVersion, termsVersion string) (*dto.UserDataExport, error) {
 	user, err := s.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -203,14 +203,14 @@ func (s *UserService) ExportUserData(ctx context.Context, userID uuid.UUID, poli
 		logResponses = append(logResponses, dto.NewHydrationLogResponse(logEntry))
 	}
 
-	userResponse := dto.NewUserResponse(*user, policiesVersion)
+	userResponse := dto.NewUserResponse(*user, privacyVersion, termsVersion)
 
 	return &dto.UserDataExport{
 		User:            userResponse,
 		Drinks:          drinkResponses,
 		HydrationLogs:   logResponses,
 		ExportedAt:      time.Now().UTC(),
-		PoliciesVersion: policiesVersion,
+		PoliciesVersion: privacyVersion, // For backward compatibility
 	}, nil
 }
 

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { SEO } from '@/components/SEO';
+import { SiteFooter } from '@/components/SiteFooter';
 import { Droplet, Target, Trophy, TrendingUp, Activity, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import heroImage from '@/assets/hero-image.png';
@@ -149,11 +150,7 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="container max-w-6xl mx-auto px-4 py-8 border-t">
-        <div className="text-center text-muted-foreground">
-          <p>&copy; 2025 Archer Aqua. Stay hydrated, stay healthy.</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
     </>
   );

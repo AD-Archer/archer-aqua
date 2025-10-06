@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/AD-Archer/archer-aqua/backend/internal/config"
@@ -51,12 +52,28 @@ func Connect(cfg config.Config, appLogger *slog.Logger) (*gorm.DB, error) {
 }
 
 func migrate(database *gorm.DB) error {
-	return database.AutoMigrate(
+	// Run AutoMigrate and handle column already exists errors gracefully
+	err := database.AutoMigrate(
 		&models.User{},
 		&models.Drink{},
 		&models.HydrationLog{},
 		&models.WeatherData{},
 	)
+
+	// If the error is about columns already existing, we can ignore it
+	// This happens during development when the schema has been partially migrated
+	if err != nil && !isColumnExistsError(err) {
+		return err
+	}
+
+	return nil
+}
+
+// isColumnExistsError checks if the error is about a column already existing
+func isColumnExistsError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "already exists") ||
+		strings.Contains(errStr, "SQLSTATE 42701")
 }
 
 func configureConnectionPool(sqlDB *sql.DB) {

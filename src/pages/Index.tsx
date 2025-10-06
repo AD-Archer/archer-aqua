@@ -4,7 +4,7 @@ import { useWaterTracking } from '@/hooks/useWaterTracking';
 import { SEO } from '@/components/SEO';
 import { CircularProgress } from '@/components/CircularProgress';
 import { QuickAddButtons } from '@/components/QuickAddButtons';
-import { AchievementCard } from '@/components/AchievementCard';
+import { PolicyAcceptanceDialog } from '@/components/PolicyAcceptanceDialog';
 import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
 import { CalendarView } from '@/components/CalendarView';
@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { AchievementCard } from '@/components/AchievementCard';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -42,6 +43,9 @@ const Index = () => {
   const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
   const [progressWheelStyle, setProgressWheelStyle] = useState(getProgressWheelStyle());
   const [isCheckingProfile, setIsCheckingProfile] = useState(true);
+  const [showPolicyDialog, setShowPolicyDialog] = useState(false);
+  const [requiresPrivacy, setRequiresPrivacy] = useState(false);
+  const [requiresTerms, setRequiresTerms] = useState(false);
 
   // Get all drinks for today
   const allDrinks = todayRecord?.drinks || [];
@@ -87,6 +91,14 @@ const Index = () => {
           if (!authState?.hasProfile) {
             // Profile not complete, redirect to setup
             navigate('/profile-setup', { replace: true });
+            return;
+          }
+
+          // Check if policies need to be accepted
+          if (authState.requiresPolicyAcceptance) {
+            setRequiresPrivacy(authState.user.requiresPrivacyAcceptance || false);
+            setRequiresTerms(authState.user.requiresTermsAcceptance || false);
+            setShowPolicyDialog(true);
             return;
           }
         } catch (error) {
@@ -485,6 +497,17 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <PolicyAcceptanceDialog
+        isOpen={showPolicyDialog}
+        onClose={() => setShowPolicyDialog(false)}
+        requiresPrivacy={requiresPrivacy}
+        requiresTerms={requiresTerms}
+        onAccepted={(user) => {
+          // Update local state if needed
+          setShowPolicyDialog(false);
+        }}
+      />
     </div>
     </>
   );

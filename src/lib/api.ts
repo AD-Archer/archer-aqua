@@ -10,6 +10,26 @@ interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
+// Global error handler for API errors
+function handleApiError(error: Error, path: string): never {
+  // Check if it's a network error (backend not available)
+  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    // Network error - redirect to connection error page
+    window.location.href = '/connection-error';
+    throw error;
+  }
+
+  // Check for specific HTTP status codes that indicate backend issues
+  if (error.message.includes('500') || error.message.includes('502') || error.message.includes('503') || error.message.includes('504')) {
+    // Server error - redirect to general error page
+    window.location.href = '/error';
+    throw error;
+  }
+
+  // For other errors, re-throw as normal
+  throw error;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   if (!API_BASE_URL) {
     throw new Error('API base URL is not configured. Set VITE_API_BASE_URL in your environment.');
@@ -31,29 +51,34 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...fetchOptions,
-    method: fetchOptions.method ?? 'GET',
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...fetchOptions,
+      method: fetchOptions.method ?? 'GET',
+      headers,
+    });
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const contentType = response.headers.get('Content-Type');
-  const isJSON = contentType?.includes('application/json');
-  const data = isJSON ? await response.json() : await response.text();
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      clearAuthToken();
+    if (response.status === 204) {
+      return undefined as T;
     }
-    const message = isJSON && data?.error ? data.error : response.statusText || 'Unknown error';
-    throw new Error(message);
-  }
 
-  return data as T;
+    const contentType = response.headers.get('Content-Type');
+    const isJSON = contentType?.includes('application/json');
+    const data = isJSON ? await response.json() : await response.text();
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        clearAuthToken();
+      }
+      const message = isJSON && data?.error ? data.error : response.statusText || 'Unknown error';
+      throw new Error(message);
+    }
+
+    return data as T;
+  } catch (error) {
+    // Handle API errors globally
+    handleApiError(error as Error, path);
+  }
 }
 
 export interface ApiLocationPayload {
@@ -102,6 +127,14 @@ export interface ApiUserResponse {
   policiesAcceptedAt?: string | null;
   policiesCurrentVersion?: string;
   requiresPolicyAcceptance?: boolean;
+  privacyAcceptedVersion?: string | null;
+  privacyAcceptedAt?: string | null;
+  privacyCurrentVersion?: string;
+  requiresPrivacyAcceptance?: boolean;
+  termsAcceptedVersion?: string | null;
+  termsAcceptedAt?: string | null;
+  termsCurrentVersion?: string;
+  requiresTermsAcceptance?: boolean;
 }
 
 export interface ApiDrinkResponse {
@@ -164,8 +197,8 @@ export interface ApiUserDataExport {
 }
 
 export interface ImportUserDataPayload {
-  drinks: ApiDrinkResponse[];
-  hydrationLogs: ApiHydrationLogResponse[];
+  drinks?: ApiDrinkResponse[];
+  hydrationLogs?: ApiHydrationLogResponse[];
   replaceExisting?: boolean;
 }
 
@@ -193,8 +226,10 @@ export interface RegisterPayload {
   email: string;
   password: string;
   displayName: string;
-  acceptPolicies: boolean;
-  policiesVersion: string;
+  acceptPrivacy: boolean;
+  acceptTerms: boolean;
+  privacyVersion: string;
+  termsVersion: string;
 }
 
 export interface LoginPayload {
@@ -358,6 +393,23 @@ export async function updateUser(userId: string, payload: UpdateUserPayload) {
   });
 }
 
+export async function deleteUserAccount(userId: string) {
+  return request<{ message: string }>(`/api/users/${userId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function exportUserData(userId: string) {
+  return request<ApiUserDataExport>(`/api/users/${userId}/export`);
+}
+
+export async function importUserData(userId: string, payload: ImportUserDataPayload) {
+  return request<ApiUserDataExport>(`/api/users/${userId}/import`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function listDrinks(userId: string) {
   return request<ApiDrinkResponse[]>(`/api/users/${userId}/drinks`);
 }
@@ -461,24 +513,43 @@ export async function registerUser(payload: RegisterPayload) {
 }
 
 export async function loginUser(payload: LoginPayload): Promise<ApiAuthResponse | ApiTwoFactorRequiredResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    // Handle API errors globally
+    handleApiError(error as Error, '/api/auth/login');
   }
-
-  return response.json();
 }
 
 export async function getAuthState() {
   return request<ApiAuthStateResponse>(`/api/auth/me`);
+}
+
+export async function acceptPrivacy(version: string) {
+  return request<ApiUserResponse>(`/api/auth/accept-privacy`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+}
+
+export async function acceptTerms(version: string) {
+  return request<ApiUserResponse>(`/api/auth/accept-terms`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
 }
 
 export function getGoogleOAuthUrl(redirectUrl: string): string {

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Droplet, Globe, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ import {
   type ApiAuthResponse,
   type ApiUserResponse,
 } from '@/lib/api';
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from '@/lib/policies';
 import { backendIsEnabled } from '@/lib/backend';
 import type {
   ActivityLevel,
@@ -108,6 +110,8 @@ export default function Auth() {
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const apiEnabled = backendIsEnabled();
 
   useEffect(() => {
@@ -195,9 +199,11 @@ export default function Auth() {
           const response = await registerUser({
             email,
             password,
-            displayName: name || email.split('@')[0],
-            acceptPolicies: false,
-            policiesVersion: ''
+            displayName: name,
+            acceptPrivacy,
+            acceptTerms,
+            privacyVersion: CURRENT_PRIVACY_VERSION,
+            termsVersion: CURRENT_TERMS_VERSION
           });
           
           saveAuthToken(response.token);
@@ -318,7 +324,38 @@ export default function Auth() {
               </div>
             )}
 
-            <Button type="submit" className="w-full bg-gradient-water" disabled={isSubmitting || isGoogleLoading}>
+            {isSignUp && (
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="acceptPrivacy"
+                    checked={acceptPrivacy}
+                    onCheckedChange={(checked) => setAcceptPrivacy(checked as boolean)}
+                  />
+                  <Label htmlFor="acceptPrivacy" className="text-sm">
+                    I accept the{' '}
+                    <a href="/privacy" target="_blank" className="text-primary hover:underline">
+                      Privacy Policy
+                    </a>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="acceptTerms"
+                    checked={acceptTerms}
+                    onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+                  />
+                  <Label htmlFor="acceptTerms" className="text-sm">
+                    I accept the{' '}
+                    <a href="/terms" target="_blank" className="text-primary hover:underline">
+                      Terms of Service
+                    </a>
+                  </Label>
+                </div>
+              </div>
+            )}
+
+            <Button type="submit" className="w-full bg-gradient-water" disabled={isSubmitting || isGoogleLoading || (isSignUp && (!acceptPrivacy || !acceptTerms))}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {isSignUp ? 'Sign Up' : 'Sign In'}
             </Button>
