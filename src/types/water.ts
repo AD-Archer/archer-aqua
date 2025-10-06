@@ -9,7 +9,7 @@ export interface CustomDrinkType {
   name: string;
   color: string;
   hydrationMultiplier: number;
-  icon?: string;
+  icon: string; // Name of the Lucide icon to use
 }
 
 export interface Drink {
@@ -77,22 +77,10 @@ export const DRINK_HYDRATION_MULTIPLIERS: Record<Exclude<DrinkType, 'custom'>, n
   alcohol: -0.5, // dehydrating
 };
 
-export const DRINK_ICONS: Record<Exclude<DrinkType, 'custom'>, string> = {
-  water: '💧',
-  sports_drink: '⚡',
-  milk: '🥛',
-  tea: '🍵',
-  juice: '🧃',
-  coffee: '☕',
-  soda: '🥤',
-  energy_drink: '🔋',
-  alcohol: '🍺',
-};
-
 export const DRINK_COLORS: Record<Exclude<DrinkType, 'custom'>, string> = {
   water: '#3b82f6', // blue
   sports_drink: '#8b5cf6', // purple
-  milk: '#f8fafc', // white/light
+  milk: '#38bdf8', // sky blue (lighter background, visible icon)
   tea: '#84cc16', // lime
   juice: '#f97316', // orange
   coffee: '#78350f', // brown

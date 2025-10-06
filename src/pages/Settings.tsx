@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Droplet, ArrowLeft, LogOut, Plus, Trash2 } from 'lucide-react';
+import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, type LucideIcon } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius } from '@/types/water';
@@ -16,6 +17,12 @@ import { Slider } from '@/components/ui/slider';
 import { WeatherCard } from '@/components/WeatherCard';
 import { LocationPicker } from '@/components/LocationPicker';
 import { WeeklyWeatherView } from '@/components/WeeklyWeatherView';
+
+const CUSTOM_DRINK_ICONS = [
+  'Droplet', 'Coffee', 'Wine', 'Beer', 'Milk', 'Apple', 'Cherry', 
+  'Grape', 'Citrus', 'Banana', 'Soup', 'IceCreamCone', 'Cake', 
+  'Battery', 'Heart', 'Zap', 'Sun', 'Moon', 'Star', 'Sparkles', 'GlassWater'
+];
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -38,6 +45,11 @@ export default function Settings() {
   const [newDrinkName, setNewDrinkName] = useState('');
   const [newDrinkColor, setNewDrinkColor] = useState('#3b82f6');
   const [newDrinkMultiplier, setNewDrinkMultiplier] = useState([1.0]);
+  const [newDrinkIcon, setNewDrinkIcon] = useState('GlassWater');
+  
+  // Edit drink state
+  const [editingDrink, setEditingDrink] = useState<CustomDrinkType | null>(null);
+  const [isEditDrinkDialogOpen, setIsEditDrinkDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -182,6 +194,7 @@ export default function Settings() {
       name: newDrinkName.trim(),
       color: newDrinkColor,
       hydrationMultiplier: newDrinkMultiplier[0],
+      icon: newDrinkIcon,
     };
 
     saveCustomDrink(newDrink);
@@ -192,6 +205,7 @@ export default function Settings() {
     setNewDrinkName('');
     setNewDrinkColor('#3b82f6');
     setNewDrinkMultiplier([1.0]);
+    setNewDrinkIcon('GlassWater');
     setIsAddDrinkDialogOpen(false);
   };
 
@@ -200,6 +214,26 @@ export default function Settings() {
     deleteCustomDrink(id);
     setCustomDrinks(customDrinks.filter(d => d.id !== id));
     toast.success(`Deleted "${drink?.name}"`);
+  };
+
+  const handleEditCustomDrink = (drink: CustomDrinkType) => {
+    setEditingDrink(drink);
+    setIsEditDrinkDialogOpen(true);
+  };
+
+  const handleUpdateCustomDrink = () => {
+    if (!editingDrink) return;
+
+    if (!editingDrink.name.trim()) {
+      toast.error('Please enter a drink name');
+      return;
+    }
+
+    saveCustomDrink(editingDrink);
+    setCustomDrinks(customDrinks.map(d => d.id === editingDrink.id ? editingDrink : d));
+    toast.success(`Updated "${editingDrink.name}"`);
+    setIsEditDrinkDialogOpen(false);
+    setEditingDrink(null);
   };
 
   const handleWeatherAdjustmentChange = (enabled: boolean) => {
@@ -436,6 +470,254 @@ export default function Settings() {
             </CardContent>
           </Card>
 
+          {/* Custom Drinks */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Custom Drinks</CardTitle>
+                  <CardDescription>
+                    Add your own drinks with custom hydration values
+                  </CardDescription>
+                </div>
+                <Dialog open={isAddDrinkDialogOpen} onOpenChange={setIsAddDrinkDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Custom Drink</DialogTitle>
+                      <DialogDescription>
+                        Create a custom drink type with your own hydration multiplier
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="drink-name">Drink Name</Label>
+                        <Input
+                          id="drink-name"
+                          placeholder="e.g., Herbal Tea, Smoothie"
+                          value={newDrinkName}
+                          onChange={(e) => setNewDrinkName(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="drink-color">Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="drink-color"
+                            type="color"
+                            value={newDrinkColor}
+                            onChange={(e) => setNewDrinkColor(e.target.value)}
+                            className="w-20 h-10"
+                          />
+                          <Input
+                            type="text"
+                            value={newDrinkColor}
+                            onChange={(e) => setNewDrinkColor(e.target.value)}
+                            placeholder="#3b82f6"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Hydration Multiplier: {newDrinkMultiplier[0].toFixed(2)}x</Label>
+                        <Slider
+                          value={newDrinkMultiplier}
+                          onValueChange={setNewDrinkMultiplier}
+                          min={-0.5}
+                          max={1.5}
+                          step={0.05}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {newDrinkMultiplier[0] < 0 ? 'Dehydrating' :
+                           newDrinkMultiplier[0] < 0.5 ? 'Low hydration' :
+                           newDrinkMultiplier[0] < 0.9 ? 'Moderate hydration' :
+                           newDrinkMultiplier[0] < 1.1 ? 'Full hydration' :
+                           'Enhanced hydration'}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Choose Icon</Label>
+                        <div className="max-h-48 overflow-y-auto border rounded-md p-2">
+                          <div className="grid grid-cols-7 gap-2">
+                            {CUSTOM_DRINK_ICONS.map((iconName) => {
+                              const IconComponent = (LucideIcons as unknown as Record<string, LucideIcon>)[iconName];
+                              return (
+                                <Button
+                                  key={iconName}
+                                  type="button"
+                                  variant={newDrinkIcon === iconName ? "default" : "outline"}
+                                  size="sm"
+                                  className="h-10 w-10 p-0"
+                                  onClick={() => setNewDrinkIcon(iconName)}
+                                >
+                                  {IconComponent && <IconComponent className="h-4 w-4" />}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button onClick={handleAddCustomDrink} className="w-full bg-gradient-water">
+                        Add Custom Drink
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {customDrinks.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No custom drinks yet. Add one to get started!
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {customDrinks.map((drink) => {
+                    const IconComponent = (LucideIcons as unknown as Record<string, LucideIcon>)[drink.icon] || GlassWater;
+                    return (
+                      <div
+                        key={drink.id}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center"
+                            style={{ backgroundColor: drink.color }}
+                          >
+                            <IconComponent className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{drink.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {drink.hydrationMultiplier.toFixed(2)}x hydration
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditCustomDrink(drink)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteCustomDrink(drink.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Edit Custom Drink Dialog */}
+          <Dialog open={isEditDrinkDialogOpen} onOpenChange={setIsEditDrinkDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Custom Drink</DialogTitle>
+                <DialogDescription>
+                  Update your custom drink settings
+                </DialogDescription>
+              </DialogHeader>
+              {editingDrink && (
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-drink-name">Drink Name</Label>
+                    <Input
+                      id="edit-drink-name"
+                      placeholder="e.g., Herbal Tea, Smoothie"
+                      value={editingDrink.name}
+                      onChange={(e) => setEditingDrink({ ...editingDrink, name: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-drink-color">Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="edit-drink-color"
+                        type="color"
+                        value={editingDrink.color}
+                        onChange={(e) => setEditingDrink({ ...editingDrink, color: e.target.value })}
+                        className="w-20 h-10"
+                      />
+                      <Input
+                        type="text"
+                        value={editingDrink.color}
+                        onChange={(e) => setEditingDrink({ ...editingDrink, color: e.target.value })}
+                        placeholder="#3b82f6"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Hydration Multiplier: {editingDrink.hydrationMultiplier.toFixed(2)}x</Label>
+                    <Slider
+                      value={[editingDrink.hydrationMultiplier]}
+                      onValueChange={(value) => setEditingDrink({ ...editingDrink, hydrationMultiplier: value[0] })}
+                      min={-0.5}
+                      max={1.5}
+                      step={0.05}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {editingDrink.hydrationMultiplier < 0 ? 'Dehydrating' :
+                       editingDrink.hydrationMultiplier < 0.5 ? 'Low hydration' :
+                       editingDrink.hydrationMultiplier < 0.9 ? 'Moderate hydration' :
+                       editingDrink.hydrationMultiplier < 1.1 ? 'Full hydration' :
+                       'Enhanced hydration'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Choose Icon</Label>
+                    <div className="max-h-48 overflow-y-auto border rounded-md p-2">
+                      <div className="grid grid-cols-7 gap-2">
+                        {CUSTOM_DRINK_ICONS.map((iconName) => {
+                          const IconComponent = (LucideIcons as unknown as Record<string, LucideIcon>)[iconName];
+                          return (
+                            <Button
+                              key={iconName}
+                              type="button"
+                              variant={editingDrink.icon === iconName ? "default" : "outline"}
+                              size="sm"
+                              className="h-10 w-10 p-0"
+                              onClick={() => setEditingDrink({ ...editingDrink, icon: iconName })}
+                            >
+                              {IconComponent && <IconComponent className="h-4 w-4" />}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button onClick={handleUpdateCustomDrink} className="w-full bg-gradient-water">
+                    Update Custom Drink
+                  </Button>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
           {/* Timezone Preference */}
           <Card>
             <CardHeader>
@@ -481,7 +763,7 @@ export default function Settings() {
             </CardContent>
           </Card>
 
-          {/* Weather-Based Hydration */}
+          {/* Weather Toggle */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -500,11 +782,6 @@ export default function Settings() {
                 />
               </div>
             </CardHeader>
-            {useWeatherAdjustment && (
-              <CardContent className="space-y-4">
-                <WeatherCard onWeatherUpdate={handleWeatherUpdate} />
-              </CardContent>
-            )}
           </Card>
 
           {/* Location Settings - Only show when weather is enabled */}
@@ -512,132 +789,27 @@ export default function Settings() {
             <LocationPicker onLocationUpdate={handleLocationUpdate} />
           )}
 
+          {/* Current Weather - Only show when weather is enabled */}
+          {useWeatherAdjustment && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Current Weather</CardTitle>
+                <CardDescription>
+                  Real-time weather conditions affecting your hydration needs
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <WeatherCard onWeatherUpdate={handleWeatherUpdate} />
+              </CardContent>
+            </Card>
+          )}
+
           {/* Weekly Weather View - Only show when weather is enabled */}
           {useWeatherAdjustment && (
             <WeeklyWeatherView />
           )}
 
-          {/* Custom Drinks */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Custom Drinks</CardTitle>
-                  <CardDescription>
-                    Add your own drinks with custom hydration values
-                  </CardDescription>
-                </div>
-                <Dialog open={isAddDrinkDialogOpen} onOpenChange={setIsAddDrinkDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Custom Drink</DialogTitle>
-                      <DialogDescription>
-                        Create a custom drink type with your own hydration multiplier
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="drink-name">Drink Name</Label>
-                        <Input
-                          id="drink-name"
-                          placeholder="e.g., Herbal Tea, Smoothie"
-                          value={newDrinkName}
-                          onChange={(e) => setNewDrinkName(e.target.value)}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="drink-color">Color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="drink-color"
-                            type="color"
-                            value={newDrinkColor}
-                            onChange={(e) => setNewDrinkColor(e.target.value)}
-                            className="w-20 h-10"
-                          />
-                          <Input
-                            value={newDrinkColor}
-                            onChange={(e) => setNewDrinkColor(e.target.value)}
-                            placeholder="#3b82f6"
-                            className="flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="hydration-multiplier">
-                          Hydration Multiplier: {newDrinkMultiplier[0].toFixed(2)}x
-                        </Label>
-                        <Slider
-                          id="hydration-multiplier"
-                          min={-0.5}
-                          max={1.5}
-                          step={0.05}
-                          value={newDrinkMultiplier}
-                          onValueChange={setNewDrinkMultiplier}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {newDrinkMultiplier[0] < 0 ? 'Dehydrating' :
-                           newDrinkMultiplier[0] < 0.5 ? 'Low hydration' :
-                           newDrinkMultiplier[0] < 0.9 ? 'Moderate hydration' :
-                           newDrinkMultiplier[0] < 1.1 ? 'Full hydration' :
-                           'Enhanced hydration'}
-                        </p>
-                      </div>
-
-                      <Button onClick={handleAddCustomDrink} className="w-full bg-gradient-water">
-                        Add Custom Drink
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {customDrinks.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No custom drinks yet. Add one to get started!
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {customDrinks.map((drink) => (
-                    <div
-                      key={drink.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-full"
-                          style={{ backgroundColor: drink.color }}
-                        />
-                        <div>
-                          <p className="font-medium">{drink.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {drink.hydrationMultiplier.toFixed(2)}x hydration
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDeleteCustomDrink(drink.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
+        
           {/* Account Actions */}
           <Card>
             <CardHeader>

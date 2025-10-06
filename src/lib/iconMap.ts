@@ -19,6 +19,8 @@ import {
   Baby,
   type LucideIcon
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+import { getCustomDrinkById } from './storage';
 
 // Icon mapping for drink types
 export const DRINK_ICON_MAP: Record<string, LucideIcon> = {
@@ -73,7 +75,18 @@ export const HYDRATION_STATUS_ICONS: Record<string, LucideIcon> = {
 };
 
 // Helper function to get icon component
-export function getDrinkIcon(type: string): LucideIcon {
+export function getDrinkIcon(type: string, customDrinkId?: string): LucideIcon {
+  // If it's a custom drink, try to get the icon from the custom drink data
+  if (type === 'custom' && customDrinkId) {
+    const customDrink = getCustomDrinkById(customDrinkId);
+    if (customDrink && customDrink.icon) {
+      const IconComponent = (LucideIcons as unknown as Record<string, LucideIcon>)[customDrink.icon];
+      if (IconComponent) {
+        return IconComponent;
+      }
+    }
+  }
+  
   return DRINK_ICON_MAP[type] || GlassWater;
 }
 

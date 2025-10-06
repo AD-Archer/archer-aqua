@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useWaterTracking } from '@/hooks/useWaterTracking';
 import { CircularProgress } from '@/components/CircularProgress';
 import { QuickAddButtons } from '@/components/QuickAddButtons';
-import { AddDrinkDialog } from '@/components/AddDrinkDialog';
 import { AchievementCard } from '@/components/AchievementCard';
 import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
@@ -32,11 +31,32 @@ import {
 const Index = () => {
   const navigate = useNavigate();
   const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink } = useWaterTracking();
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
   const [selectedDate, setSelectedDate] = useState<string>(getTodayKey());
   const [currentTab, setCurrentTab] = useState('today');
   const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
+
+  // Get all drinks for today
+  const allDrinks = todayRecord?.drinks || [];
+  
+  // Get unique recent drinks (last 4 unique drink types/amounts)
+  const getUniqueRecentDrinks = () => {
+    const reversedDrinks = [...allDrinks].reverse();
+    const uniqueDrinks: typeof allDrinks = [];
+    const seenCombos = new Set<string>();
+    
+    for (const drink of reversedDrinks) {
+      const combo = `${drink.type}-${drink.amount}-${drink.customDrinkId || ''}`;
+      if (!seenCombos.has(combo) && uniqueDrinks.length < 4) {
+        uniqueDrinks.push(drink);
+        seenCombos.add(combo);
+      }
+    }
+    
+    return uniqueDrinks;
+  };
+
+  const recentUniqueDrinks = getUniqueRecentDrinks();
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -153,21 +173,55 @@ const Index = () => {
               <h2 className="text-lg font-semibold mb-3">Quick Add</h2>
               <QuickAddButtons
                 onQuickAdd={handleQuickAdd}
-                onCustomAdd={() => setDialogOpen(true)}
+                onAddDrink={handleAddDrink}
                 unit={unitPreference}
               />
             </div>
 
-            {/* Today's Drinks */}
-            {todayRecord && todayRecord.drinks.length > 0 && (
+            {/* Recent Drink Quick Add Cards */}
+            {recentUniqueDrinks.length > 0 && (
               <div>
-                <h2 className="text-lg font-semibold mb-3">Today's Drinks</h2>
-                <div className="space-y-2">
-                  {todayRecord.drinks.slice().reverse().map((drink) => {
+                <h2 className="text-lg font-semibold mb-3">Quick Add Recent</h2>
+                <div className="grid grid-cols-2 gap-3">
+                  {recentUniqueDrinks.map((drink, index) => {
                     const isCustom = drink.type === 'custom' && drink.customDrinkId;
                     const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
                     const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
-                    const DrinkIcon = getDrinkIcon(drink.type);
+                    const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
+                    const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
+                    
+                    return (
+                      <Button
+                        key={`${drink.type}-${drink.amount}-${index}`}
+                        onClick={() => handleAddDrink(drink.type, drink.amount, drink.customDrinkId)}
+                        variant="outline"
+                        className="flex flex-col h-24 hover:bg-primary/10 hover:border-primary transition-all group p-3"
+                      >
+                        <div 
+                          className="w-10 h-10 rounded-full flex items-center justify-center mb-1 group-hover:scale-110 transition-transform"
+                          style={{ backgroundColor: `${drinkColor}20`, color: drinkColor }}
+                        >
+                          <DrinkIcon className="h-5 w-5" style={{ color: drinkColor }} />
+                        </div>
+                        <span className="text-sm font-medium capitalize">{drinkName}</span>
+                        <span className="text-xs text-muted-foreground">{formatVolume(drink.amount, unitPreference)}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Today's Drinks - All drinks with scrollable container */}
+            {allDrinks.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold mb-3">Today's Drinks</h2>
+                <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
+                  {allDrinks.map((drink) => {
+                    const isCustom = drink.type === 'custom' && drink.customDrinkId;
+                    const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
+                    const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
+                    const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
                     const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
                     
                     return (
@@ -233,7 +287,7 @@ const Index = () => {
             <CalendarView 
               unitPreference={unitPreference}
               onRemoveDrink={handleRemoveDrink}
-              onAddDrink={() => setDialogOpen(true)}
+              onAddDrink={() => {}}
               onDateSelect={handleDateSelect}
             />
           </TabsContent>
@@ -248,13 +302,6 @@ const Index = () => {
             ))}
           </TabsContent>
         </Tabs>
-
-        {/* Add Drink Dialog */}
-        <AddDrinkDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          onAddDrink={handleAddDrink}
-        />
       </div>
     </div>
   );

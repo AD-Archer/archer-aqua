@@ -157,7 +157,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
                 const isCustom = drink.type === 'custom' && drink.customDrinkId;
                 const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
                 const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
-                const DrinkIcon = getDrinkIcon(drink.type);
+                const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
                 const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
                 
                 return (
