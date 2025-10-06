@@ -7,10 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment, getBackendUserId, getUser, saveGoalMode } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment, getBackendUserId, getUser, saveGoalMode, saveUnitPreference, getUnitPreference } from '@/lib/storage';
 import { backendIsEnabled, ensureBackendUser } from '@/lib/backend';
 import { getUser as getBackendUser, createUser as createBackendUser, getAuthState } from '@/lib/api';
-import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit } from '@/types/water';
+import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit, VolumeUnit } from '@/types/water';
 import { getWeatherData, getLocationPreference } from '@/lib/weather';
 import { LocationPicker } from '@/components/LocationPicker';
 
@@ -19,6 +19,7 @@ export default function ProfileSetup() {
   const [weight, setWeight] = useState('154'); // Default in lbs (70kg)
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('lbs');
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>('F');
+  const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>('ml');
   const [age, setAge] = useState('30');
   const [gender, setGender] = useState<Gender>('other');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
@@ -54,6 +55,9 @@ export default function ProfileSetup() {
 
       const savedTempUnit = getTemperatureUnitPreference();
       setTemperatureUnit(savedTempUnit);
+
+      const savedVolumeUnit = getUnitPreference();
+      setVolumeUnit(savedVolumeUnit);
 
       // Check if weather is already enabled
       const weatherAdjustment = getUseWeatherAdjustment();
@@ -153,6 +157,7 @@ export default function ProfileSetup() {
     saveUserProfile(profile);
     saveWeightUnitPreference(weightUnit);
     saveTemperatureUnitPreference(temperatureUnit);
+    saveUnitPreference(volumeUnit);
     
     // Calculate and save personalized goal
     const personalizedGoal = calculatePersonalizedGoal(profile, weatherEnabled);
@@ -182,7 +187,7 @@ export default function ProfileSetup() {
             latitude: locationPreference.type === 'manual' ? locationPreference.manualLocation?.lat : undefined,
             longitude: locationPreference.type === 'manual' ? locationPreference.manualLocation?.lon : undefined,
           },
-          volumeUnit: 'ml',
+          volumeUnit: volumeUnit,
           temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
           progressWheelStyle: 'drink_colors',
           weatherAdjustmentsEnabled: weatherEnabled,
@@ -268,6 +273,12 @@ export default function ProfileSetup() {
                   max="120"
                   value={age}
                   onChange={(e) => setAge(e.target.value)}
+                  onFocus={(e) => {
+                    // Set cursor to end of input
+                    setTimeout(() => {
+                      e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+                    }, 0);
+                  }}
                   required
                 />
                 <p className="text-xs text-muted-foreground">Your age in years</p>
@@ -320,6 +331,20 @@ export default function ProfileSetup() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="volume-unit">Volume Unit</Label>
+              <Select value={volumeUnit} onValueChange={(value: VolumeUnit) => setVolumeUnit(value)}>
+                <SelectTrigger id="volume-unit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ml">Milliliters (ml)</SelectItem>
+                  <SelectItem value="oz">Fluid Ounces (oz)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Your preferred volume unit for water tracking</p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="climate">Climate</Label>
               <Select value={climate} onValueChange={(value: 'cold' | 'moderate' | 'hot') => setClimate(value)}>
                 <SelectTrigger id="climate">
@@ -341,10 +366,6 @@ export default function ProfileSetup() {
                 Your typical environment (used as fallback if weather tracking is disabled)
               </p>
             </div>
-
-            <Button type="submit" className="w-full bg-gradient-water">
-              Calculate My Goal
-            </Button>
 
             <div className="pt-4 border-t space-y-4">
               <div className="flex items-center justify-between mb-2">
@@ -382,15 +403,13 @@ export default function ProfileSetup() {
                 </div>
               )}
             </div>
+
+            <Button type="submit" className="w-full bg-gradient-water">
+              Calculate My Goal
+            </Button>
           </form>
         </CardContent>
-        <Button
-          type="button"
-          className="w-full bg-gradient-water"
-          onClick={() => navigate('/app')}
-        >
-          Get started
-        </Button>
+        
 
       </Card>
 </div>
