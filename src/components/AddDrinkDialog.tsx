@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { DrinkType, DRINK_HYDRATION_MULTIPLIERS } from '@/types/water';
+import { useState, useEffect } from 'react';
+import { DrinkType, DRINK_HYDRATION_MULTIPLIERS, DRINK_COLORS, CustomDrinkType } from '@/types/water';
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Droplet, Coffee, Wine, Grape, Zap, Milk, Battery } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getCustomDrinks } from '@/lib/storage';
 
 interface AddDrinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddDrink: (type: DrinkType, amount: number) => void;
+  onAddDrink: (type: DrinkType, amount: number, customDrinkId?: string) => void;
 }
 
 const DRINK_OPTIONS: Array<{
@@ -23,15 +24,15 @@ const DRINK_OPTIONS: Array<{
   icon: React.ReactNode;
   color: string;
 }> = [
-  { type: 'water', label: 'Water', icon: <Droplet className="h-5 w-5" />, color: 'primary' },
-  { type: 'sports_drink', label: 'Sports', icon: <Zap className="h-5 w-5" />, color: 'primary' },
-  { type: 'milk', label: 'Milk', icon: <Milk className="h-5 w-5" />, color: 'secondary' },
-  { type: 'tea', label: 'Tea', icon: <Coffee className="h-5 w-5" />, color: 'secondary' },
-  { type: 'juice', label: 'Juice', icon: <Grape className="h-5 w-5" />, color: 'accent' },
-  { type: 'coffee', label: 'Coffee', icon: <Coffee className="h-5 w-5" />, color: 'muted' },
-  { type: 'soda', label: 'Soda', icon: <Zap className="h-5 w-5" />, color: 'muted' },
-  { type: 'energy_drink', label: 'Energy', icon: <Battery className="h-5 w-5" />, color: 'destructive' },
-  { type: 'alcohol', label: 'Alcohol', icon: <Wine className="h-5 w-5" />, color: 'destructive' },
+  { type: 'water', label: 'Water', icon: <Droplet className="h-5 w-5" />, color: DRINK_COLORS.water },
+  { type: 'sports_drink', label: 'Sports', icon: <Zap className="h-5 w-5" />, color: DRINK_COLORS.sports_drink },
+  { type: 'milk', label: 'Milk', icon: <Milk className="h-5 w-5" />, color: DRINK_COLORS.milk },
+  { type: 'tea', label: 'Tea', icon: <Coffee className="h-5 w-5" />, color: DRINK_COLORS.tea },
+  { type: 'juice', label: 'Juice', icon: <Grape className="h-5 w-5" />, color: DRINK_COLORS.juice },
+  { type: 'coffee', label: 'Coffee', icon: <Coffee className="h-5 w-5" />, color: DRINK_COLORS.coffee },
+  { type: 'soda', label: 'Soda', icon: <Zap className="h-5 w-5" />, color: DRINK_COLORS.soda },
+  { type: 'energy_drink', label: 'Energy', icon: <Battery className="h-5 w-5" />, color: DRINK_COLORS.energy_drink },
+  { type: 'alcohol', label: 'Alcohol', icon: <Wine className="h-5 w-5" />, color: DRINK_COLORS.alcohol },
 ];
 
 const AMOUNT_OPTIONS = [250, 330, 500, 750];
@@ -39,13 +40,38 @@ const AMOUNT_OPTIONS = [250, 330, 500, 750];
 export function AddDrinkDialog({ open, onOpenChange, onAddDrink }: AddDrinkDialogProps) {
   const [selectedType, setSelectedType] = useState<DrinkType>('water');
   const [selectedAmount, setSelectedAmount] = useState(250);
+  const [selectedCustomDrinkId, setSelectedCustomDrinkId] = useState<string | null>(null);
+  const [customDrinks, setCustomDrinks] = useState<CustomDrinkType[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      setCustomDrinks(getCustomDrinks());
+    }
+  }, [open]);
 
   const handleAdd = () => {
-    onAddDrink(selectedType, selectedAmount);
+    if (selectedType === 'custom' && selectedCustomDrinkId) {
+      onAddDrink(selectedType, selectedAmount, selectedCustomDrinkId);
+    } else {
+      onAddDrink(selectedType, selectedAmount);
+    }
     onOpenChange(false);
   };
 
-  const multiplier = DRINK_HYDRATION_MULTIPLIERS[selectedType];
+  const handleSelectCustomDrink = (drinkId: string) => {
+    setSelectedType('custom');
+    setSelectedCustomDrinkId(drinkId);
+  };
+
+  const getMultiplier = () => {
+    if (selectedType === 'custom' && selectedCustomDrinkId) {
+      const customDrink = customDrinks.find(d => d.id === selectedCustomDrinkId);
+      return customDrink?.hydrationMultiplier || 1.0;
+    }
+    return DRINK_HYDRATION_MULTIPLIERS[selectedType as Exclude<DrinkType, 'custom'>] || 1.0;
+  };
+
+  const multiplier = getMultiplier();
   const hydrationValue = selectedAmount * multiplier;
 
   return (
@@ -66,19 +92,58 @@ export function AddDrinkDialog({ open, onOpenChange, onAddDrink }: AddDrinkDialo
               {DRINK_OPTIONS.map((option) => (
                 <Button
                   key={option.type}
-                  variant={selectedType === option.type ? 'default' : 'outline'}
+                  variant={selectedType === option.type && !selectedCustomDrinkId ? 'default' : 'outline'}
                   className={cn(
-                    "flex flex-col h-auto py-3 gap-1",
-                    selectedType === option.type && "bg-gradient-water"
+                    "flex flex-col h-auto py-3 gap-1 relative overflow-hidden",
+                    selectedType === option.type && !selectedCustomDrinkId && "border-2"
                   )}
-                  onClick={() => setSelectedType(option.type)}
+                  style={{
+                    borderColor: selectedType === option.type && !selectedCustomDrinkId ? option.color : undefined,
+                    backgroundColor: selectedType === option.type && !selectedCustomDrinkId ? `${option.color}15` : undefined,
+                  }}
+                  onClick={() => {
+                    setSelectedType(option.type);
+                    setSelectedCustomDrinkId(null);
+                  }}
                 >
-                  {option.icon}
+                  <div style={{ color: option.color }}>
+                    {option.icon}
+                  </div>
                   <span className="text-xs">{option.label}</span>
                 </Button>
               ))}
             </div>
           </div>
+
+          {/* Custom Drinks */}
+          {customDrinks.length > 0 && (
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Custom Drinks</label>
+              <div className="grid grid-cols-3 gap-2">
+                {customDrinks.map((drink) => (
+                  <Button
+                    key={drink.id}
+                    variant={selectedCustomDrinkId === drink.id ? 'default' : 'outline'}
+                    className={cn(
+                      "flex flex-col h-auto py-3 gap-1 relative overflow-hidden",
+                      selectedCustomDrinkId === drink.id && "border-2"
+                    )}
+                    style={{
+                      borderColor: selectedCustomDrinkId === drink.id ? drink.color : undefined,
+                      backgroundColor: selectedCustomDrinkId === drink.id ? `${drink.color}15` : undefined,
+                    }}
+                    onClick={() => handleSelectCustomDrink(drink.id)}
+                  >
+                    <div
+                      className="w-6 h-6 rounded-full"
+                      style={{ backgroundColor: drink.color }}
+                    />
+                    <span className="text-xs">{drink.name}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Amount Selection */}
           <div className="space-y-3">

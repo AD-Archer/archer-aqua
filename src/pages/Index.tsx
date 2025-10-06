@@ -7,17 +7,30 @@ import { AddDrinkDialog } from '@/components/AddDrinkDialog';
 import { AchievementCard } from '@/components/AchievementCard';
 import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
-import { DrinkType } from '@/types/water';
+import { CalendarView } from '@/components/CalendarView';
+import { DrinkType, formatVolume, DRINK_COLORS, DRINK_ICONS } from '@/types/water';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Settings, Trophy, BarChart3, Droplet } from 'lucide-react';
+import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAuthenticated } from '@/lib/storage';
+import { isAuthenticated, getUnitPreference, getCustomDrinkById } from '@/lib/storage';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { todayRecord, stats, goal, addDrink, updateGoal } = useWaterTracking();
+  const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink } = useWaterTracking();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [unitPreference, setUnitPreference] = useState(getUnitPreference());
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -27,11 +40,11 @@ const Index = () => {
 
   const handleQuickAdd = (amount: number) => {
     addDrink('water', amount);
-    toast.success(`Added ${amount}ml of water! 💧`);
+    toast.success(`Added ${formatVolume(amount, unitPreference)} of water! 💧`);
   };
 
-  const handleAddDrink = (type: DrinkType, amount: number) => {
-    addDrink(type, amount);
+  const handleAddDrink = (type: DrinkType, amount: number, customDrinkId?: string) => {
+    addDrink(type, amount, customDrinkId);
     const drinkNames: Record<DrinkType, string> = {
       water: 'water',
       coffee: 'coffee',
@@ -42,8 +55,14 @@ const Index = () => {
       energy_drink: 'energy drink',
       milk: 'milk',
       sports_drink: 'sports drink',
+      custom: 'custom drink',
     };
-    toast.success(`Added ${amount}ml of ${drinkNames[type]}!`);
+    toast.success(`Added ${formatVolume(amount, unitPreference)} of ${drinkNames[type]}!`);
+  };
+
+  const handleRemoveDrink = (drinkId: string, date?: string) => {
+    removeDrink(drinkId, date);
+    toast.success('Drink removed');
   };
 
   const current = todayRecord?.totalHydration || 0;
@@ -77,10 +96,14 @@ const Index = () => {
         </header>
 
         <Tabs defaultValue="today" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="today">
               <Droplet className="h-4 w-4 mr-2" />
               Today
+            </TabsTrigger>
+            <TabsTrigger value="calendar">
+              <Calendar className="h-4 w-4 mr-2" />
+              History
             </TabsTrigger>
             <TabsTrigger value="stats">
               <BarChart3 className="h-4 w-4 mr-2" />
@@ -100,6 +123,7 @@ const Index = () => {
                 current={current}
                 goal={goal}
                 className="mb-4"
+                unit={unitPreference}
               />
               <HydrationStatus percentage={percentage} />
             </div>
@@ -110,6 +134,7 @@ const Index = () => {
               <QuickAddButtons
                 onQuickAdd={handleQuickAdd}
                 onCustomAdd={() => setDialogOpen(true)}
+                unit={unitPreference}
               />
             </div>
 
@@ -118,34 +143,82 @@ const Index = () => {
               <div>
                 <h2 className="text-lg font-semibold mb-3">Today's Drinks</h2>
                 <div className="space-y-2">
-                  {todayRecord.drinks.slice().reverse().map((drink) => (
-                    <div
-                      key={drink.id}
-                      className="flex items-center justify-between p-3 bg-card rounded-lg border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Droplet className="h-5 w-5 text-primary" />
-                        <div>
-                          <div className="font-medium capitalize">{drink.type}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {new Date(drink.timestamp).toLocaleTimeString('en-US', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
+                  {todayRecord.drinks.slice().reverse().map((drink) => {
+                    const isCustom = drink.type === 'custom' && drink.customDrinkId;
+                    const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
+                    const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
+                    const drinkIcon = isCustom ? '🥤' : DRINK_ICONS[drink.type as Exclude<DrinkType, 'custom'>];
+                    const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
+                    
+                    return (
+                      <div
+                        key={drink.id}
+                        className="flex items-center justify-between p-3 bg-card rounded-lg border"
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <div 
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
+                            style={{ backgroundColor: `${drinkColor}20`, color: drinkColor }}
+                          >
+                            {drinkIcon}
+                          </div>
+                          <div>
+                            <div className="font-medium capitalize">{drinkName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {new Date(drink.timestamp).toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold">{drink.amount}ml</div>
-                        <div className={`text-sm ${drink.hydrationValue >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                          {drink.hydrationValue > 0 ? '+' : ''}{drink.hydrationValue.toFixed(0)}ml
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="font-semibold">{formatVolume(drink.amount, unitPreference)}</div>
+                            <div className={`text-sm ${drink.hydrationValue >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                              {drink.hydrationValue > 0 ? '+' : ''}{formatVolume(drink.hydrationValue, unitPreference)}
+                            </div>
+                          </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remove Drink?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to remove this drink entry? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleRemoveDrink(drink.id)} className="bg-destructive text-destructive-foreground">
+                                  Remove
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="calendar" className="space-y-6">
+            <CalendarView 
+              unitPreference={unitPreference}
+              onRemoveDrink={handleRemoveDrink}
+              onAddDrink={() => setDialogOpen(true)}
+              onDateSelect={(date) => {
+                // Could refresh data or do other actions when date changes
+                console.log('Date selected:', date);
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="stats" className="space-y-6">

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { VolumeUnit, formatVolume } from '@/types/water';
 
 interface CircularProgressProps {
   progress: number; // 0-100
@@ -7,6 +8,7 @@ interface CircularProgressProps {
   current: number;
   goal: number;
   className?: string;
+  unit?: VolumeUnit;
 }
 
 export function CircularProgress({ 
@@ -15,15 +17,21 @@ export function CircularProgress({
   strokeWidth = 20,
   current,
   goal,
-  className 
+  className,
+  unit = 'ml'
 }: CircularProgressProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (Math.min(progress, 100) / 100) * circumference;
 
   const formatAmount = (ml: number) => {
+    if (unit === 'oz') {
+      return (ml * 0.033814).toFixed(1);
+    }
     return (ml / 1000).toFixed(1);
   };
+
+  const unitLabel = unit === 'oz' ? 'oz' : 'L';
 
   return (
     <div className={cn("relative inline-flex items-center justify-center", className)}>
@@ -61,7 +69,7 @@ export function CircularProgress({
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <div className="text-5xl font-bold text-foreground">
           {formatAmount(current)}
-          <span className="text-3xl text-muted-foreground">/{formatAmount(goal)}L</span>
+          <span className="text-3xl text-muted-foreground">/{formatAmount(goal)}{unitLabel}</span>
         </div>
         <div className="mt-2 text-sm font-medium text-muted-foreground">
           {progress >= 100 ? 'Goal Reached! 🎉' : `${Math.round(progress)}% Complete`}

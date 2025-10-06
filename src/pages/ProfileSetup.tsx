@@ -7,12 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated } from '@/lib/storage';
-import { Gender, ActivityLevel, UserProfile } from '@/types/water';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone } from '@/lib/storage';
+import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit } from '@/types/water';
 
 export default function ProfileSetup() {
   const navigate = useNavigate();
-  const [weight, setWeight] = useState('70');
+  const [weight, setWeight] = useState('154'); // Default in lbs (70kg)
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('lbs');
+  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>('F');
   const [age, setAge] = useState('30');
   const [gender, setGender] = useState<Gender>('other');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
@@ -24,25 +26,40 @@ export default function ProfileSetup() {
       return;
     }
 
+    const savedWeightUnit = getWeightUnitPreference();
+    setWeightUnit(savedWeightUnit);
+
+    const savedTempUnit = getTemperatureUnitPreference();
+    setTemperatureUnit(savedTempUnit);
+
     // Check if profile already exists
     const existingProfile = getUserProfile();
     if (existingProfile) {
-      setWeight(existingProfile.weight.toString());
+      const displayWeight = savedWeightUnit === 'lbs' 
+        ? kgToLbs(existingProfile.weight) 
+        : existingProfile.weight;
+      setWeight(displayWeight.toFixed(1));
       setAge(existingProfile.age.toString());
       setGender(existingProfile.gender);
       setActivityLevel(existingProfile.activityLevel);
       setClimate(existingProfile.climate);
+    } else {
+      // Set default weight based on unit
+      setWeight(savedWeightUnit === 'lbs' ? '154' : '70');
     }
   }, [navigate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const weightNum = parseFloat(weight);
+    const weightValue = parseFloat(weight);
     const ageNum = parseInt(age);
 
-    if (weightNum < 30 || weightNum > 300) {
-      toast.error('Please enter a valid weight (30-300 kg)');
+    // Convert weight to kg for storage
+    const weightInKg = weightUnit === 'lbs' ? lbsToKg(weightValue) : weightValue;
+
+    if (weightInKg < 30 || weightInKg > 300) {
+      toast.error(`Please enter a valid weight (${weightUnit === 'lbs' ? '66-660 lbs' : '30-300 kg'})`);
       return;
     }
 
@@ -54,15 +71,23 @@ export default function ProfileSetup() {
     const profile: UserProfile = {
       name: '', // Will be populated from user storage
       email: '', // Will be populated from user storage
-      weight: weightNum,
+      weight: weightInKg, // Always store in kg
       age: ageNum,
       gender,
       activityLevel,
       climate,
       createdAt: new Date(),
+      preferredWeightUnit: weightUnit,
+      preferredTemperatureUnit: temperatureUnit,
     };
 
     saveUserProfile(profile);
+    saveWeightUnitPreference(weightUnit);
+    saveTemperatureUnitPreference(temperatureUnit);
+    
+    // Save user's detected timezone
+    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    saveTimezone(detectedTimezone);
     
     // Calculate and save personalized goal
     const personalizedGoal = calculatePersonalizedGoal(profile);
@@ -70,6 +95,17 @@ export default function ProfileSetup() {
     
     toast.success(`Your daily goal is set to ${(personalizedGoal / 1000).toFixed(1)}L`);
     navigate('/app');
+  };
+
+  const handleWeightUnitChange = (newUnit: WeightUnit) => {
+    const currentWeight = parseFloat(weight);
+    if (!isNaN(currentWeight)) {
+      const convertedWeight = newUnit === 'lbs'
+        ? (weightUnit === 'kg' ? kgToLbs(currentWeight) : currentWeight)
+        : (weightUnit === 'lbs' ? lbsToKg(currentWeight) : currentWeight);
+      setWeight(convertedWeight.toFixed(1));
+    }
+    setWeightUnit(newUnit);
   };
 
   return (
@@ -88,17 +124,29 @@ export default function ProfileSetup() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="weight">Weight (kg)</Label>
-                <Input
-                  id="weight"
-                  type="number"
-                  min="30"
-                  max="300"
-                  step="0.1"
-                  value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
-                  required
-                />
+                <Label htmlFor="weight">Weight</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="weight"
+                    type="number"
+                    min={weightUnit === 'lbs' ? '66' : '30'}
+                    max={weightUnit === 'lbs' ? '660' : '300'}
+                    step="0.1"
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                    required
+                    className="flex-1"
+                  />
+                  <Select value={weightUnit} onValueChange={(value: WeightUnit) => handleWeightUnitChange(value)}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kg">kg</SelectItem>
+                      <SelectItem value="lbs">lbs</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <p className="text-xs text-muted-foreground">Your current weight</p>
               </div>
 
@@ -149,15 +197,35 @@ export default function ProfileSetup() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="temperature-unit">Temperature Unit</Label>
+              <Select value={temperatureUnit} onValueChange={(value: TemperatureUnit) => setTemperatureUnit(value)}>
+                <SelectTrigger id="temperature-unit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="C">Celsius (°C)</SelectItem>
+                  <SelectItem value="F">Fahrenheit (°F)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Your preferred temperature unit</p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="climate">Climate</Label>
               <Select value={climate} onValueChange={(value: 'cold' | 'moderate' | 'hot') => setClimate(value)}>
                 <SelectTrigger id="climate">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cold">Cold (below 15°C / 59°F)</SelectItem>
-                  <SelectItem value="moderate">Moderate (15-25°C / 59-77°F)</SelectItem>
-                  <SelectItem value="hot">Hot (above 25°C / 77°F)</SelectItem>
+                  <SelectItem value="cold">
+                    Cold (below {temperatureUnit === 'F' ? '59°F' : '15°C'})
+                  </SelectItem>
+                  <SelectItem value="moderate">
+                    Moderate ({temperatureUnit === 'F' ? '59-77°F' : '15-25°C'})
+                  </SelectItem>
+                  <SelectItem value="hot">
+                    Hot (above {temperatureUnit === 'F' ? '77°F' : '25°C'})
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Your typical environment</p>

@@ -8,6 +8,7 @@ import {
   getTodayKey,
   getDailyGoal,
   saveDailyGoal,
+  getCustomDrinkById,
 } from '@/lib/storage';
 
 export function useWaterTracking() {
@@ -36,35 +37,7 @@ export function useWaterTracking() {
     setTodayRecord(record);
   };
 
-  const addDrink = useCallback((type: DrinkType, amount: number) => {
-    if (!todayRecord) return;
-
-    const multiplier = DRINK_HYDRATION_MULTIPLIERS[type];
-    const hydrationValue = amount * multiplier;
-
-    const newDrink: Drink = {
-      id: `${Date.now()}-${Math.random()}`,
-      type,
-      amount,
-      timestamp: new Date(),
-      hydrationValue,
-    };
-
-    const updatedDrinks = [...todayRecord.drinks, newDrink];
-    const totalHydration = updatedDrinks.reduce((sum, d) => sum + d.hydrationValue, 0);
-
-    const updatedRecord: DayRecord = {
-      ...todayRecord,
-      drinks: updatedDrinks,
-      totalHydration,
-    };
-
-    setTodayRecord(updatedRecord);
-    saveDayRecord(updatedRecord);
-    updateStats(updatedRecord);
-  }, [todayRecord]);
-
-  const updateStats = (record: DayRecord) => {
+  const updateStats = useCallback((record: DayRecord) => {
     const newStats = { ...stats };
     
     // Update total water consumed
@@ -129,7 +102,44 @@ export function useWaterTracking() {
 
     setStats(newStats);
     saveUserStats(newStats);
-  };
+  }, [stats, todayRecord]);
+
+  const addDrink = useCallback((type: DrinkType, amount: number, customDrinkId?: string) => {
+    if (!todayRecord) return;
+
+    let multiplier = 1.0;
+    
+    if (type === 'custom' && customDrinkId) {
+      const customDrink = getCustomDrinkById(customDrinkId);
+      multiplier = customDrink?.hydrationMultiplier || 1.0;
+    } else if (type !== 'custom') {
+      multiplier = DRINK_HYDRATION_MULTIPLIERS[type];
+    }
+    
+    const hydrationValue = amount * multiplier;
+
+    const newDrink: Drink = {
+      id: `${Date.now()}-${Math.random()}`,
+      type,
+      customDrinkId,
+      amount,
+      timestamp: new Date(),
+      hydrationValue,
+    };
+
+    const updatedDrinks = [...todayRecord.drinks, newDrink];
+    const totalHydration = updatedDrinks.reduce((sum, d) => sum + d.hydrationValue, 0);
+
+    const updatedRecord: DayRecord = {
+      ...todayRecord,
+      drinks: updatedDrinks,
+      totalHydration,
+    };
+
+    setTodayRecord(updatedRecord);
+    saveDayRecord(updatedRecord);
+    updateStats(updatedRecord);
+  }, [todayRecord, updateStats]);
 
   const updateGoal = useCallback((newGoal: number) => {
     setGoal(newGoal);
@@ -142,11 +152,34 @@ export function useWaterTracking() {
     }
   }, [todayRecord]);
 
+  const removeDrink = useCallback((drinkId: string, date?: string) => {
+    const targetDate = date || getTodayKey();
+    const record = date ? getDayRecord(date) : todayRecord;
+    
+    if (!record) return;
+
+    const updatedDrinks = record.drinks.filter(d => d.id !== drinkId);
+    const totalHydration = updatedDrinks.reduce((sum, d) => sum + d.hydrationValue, 0);
+
+    const updatedRecord: DayRecord = {
+      ...record,
+      drinks: updatedDrinks,
+      totalHydration,
+    };
+
+    saveDayRecord(updatedRecord);
+    
+    if (targetDate === getTodayKey()) {
+      setTodayRecord(updatedRecord);
+    }
+  }, [todayRecord]);
+
   return {
     todayRecord,
     stats,
     goal,
     addDrink,
     updateGoal,
+    removeDrink,
   };
 }
