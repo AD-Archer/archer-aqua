@@ -37,6 +37,7 @@ import type {
   TemperatureUnit,
   UserProfile,
   VolumeUnit,
+  WeightUnit,
 } from '@/types/water';
 
 function hydrateLocalStateFromBackend(user: ApiUserResponse): void {
@@ -57,14 +58,14 @@ function hydrateLocalStateFromBackend(user: ApiUserResponse): void {
   const profile: UserProfile = {
     name: user.displayName,
     email: user.email,
-    weight: user.weightKg,
+    weight: user.weight,
     age: user.age,
     gender,
     activityLevel,
     climate: 'moderate',
     createdAt: new Date(user.createdAt),
     preferredUnit: volumeUnit,
-    preferredWeightUnit: 'kg',
+    preferredWeightUnit: (user.weightUnit as WeightUnit) || 'kg',
     preferredTemperatureUnit: temperatureUnit,
     timezone: user.timezone,
   };
@@ -79,7 +80,7 @@ function hydrateLocalStateFromBackend(user: ApiUserResponse): void {
     saveDailyGoal(Math.round(goalLiters * 1000));
   }
 
-  saveWeightUnitPreference('kg');
+  saveWeightUnitPreference((user.weightUnit as WeightUnit) || 'kg');
   saveUnitPreference(volumeUnit);
   saveTemperatureUnitPreference(temperatureUnit);
   if (user.timezone) {
@@ -103,6 +104,8 @@ export default function Auth() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const apiEnabled = backendIsEnabled();
@@ -167,6 +170,11 @@ export default function Auth() {
       return;
     }
 
+    if (requiresTwoFactor && !twoFactorCode) {
+      toast.error('Please enter your two-factor authentication code');
+      return;
+    }
+
     // Simple validation
     if (password.length < 8) {
       toast.error('Password must be at least 8 characters');
@@ -183,21 +191,35 @@ export default function Auth() {
 
     try {
       if (apiEnabled) {
-        let response: ApiAuthResponse;
         if (isSignUp) {
-          response = await registerUser({
+          const response = await registerUser({
             email,
             password,
             displayName: name || email.split('@')[0],
           });
+          
+          saveAuthToken(response.token);
+          finalizeAuthSession(response.user);
+          toast.success('Account created successfully!');
+          navigate(response.hasProfile ? '/app' : '/profile-setup');
         } else {
-          response = await loginUser({ email, password });
+          const response = await loginUser({ 
+            email, 
+            password, 
+            ...(requiresTwoFactor && twoFactorCode ? { twoFactorCode } : {})
+          });
+          
+          if ('requiresTwoFactor' in response) {
+            setRequiresTwoFactor(true);
+            toast.info('Please enter your two-factor authentication code');
+            return;
+          }
+          
+          saveAuthToken(response.token);
+          finalizeAuthSession(response.user);
+          toast.success('Welcome back!');
+          navigate(response.hasProfile ? '/app' : '/profile-setup');
         }
-
-        saveAuthToken(response.token);
-        finalizeAuthSession(response.user);
-        toast.success(isSignUp ? 'Account created successfully!' : 'Welcome back!');
-        navigate(response.hasProfile ? '/app' : '/profile-setup');
       } else {
         const displayName = isSignUp ? name : email.split('@')[0];
         saveUser(email, displayName);
@@ -278,6 +300,21 @@ export default function Auth() {
                 required
               />
             </div>
+
+            {requiresTwoFactor && (
+              <div className="space-y-2">
+                <Label htmlFor="twoFactorCode">Two-Factor Authentication Code</Label>
+                <Input
+                  id="twoFactorCode"
+                  type="text"
+                  placeholder="000000"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  maxLength={6}
+                  required={requiresTwoFactor}
+                />
+              </div>
+            )}
 
             <Button type="submit" className="w-full bg-gradient-water" disabled={isSubmitting || isGoogleLoading}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

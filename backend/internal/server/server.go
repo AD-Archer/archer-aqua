@@ -29,8 +29,9 @@ func New(cfg config.Config, db *gorm.DB, logger *slog.Logger) *Server {
 	drinkService := services.NewDrinkService(db)
 	hydrationService := services.NewHydrationService(db)
 	authService := services.NewAuthService(db, cfg)
+	weatherService := services.NewWeatherService(db)
 
-	api := handlers.NewAPI(userService, drinkService, hydrationService, authService, logger)
+	api := handlers.NewAPI(userService, drinkService, hydrationService, authService, weatherService, logger)
 
 	r := chi.NewRouter()
 	configureMiddleware(r, cfg)
@@ -93,6 +94,11 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 			r.Get("/google/login", api.BeginGoogleOAuth)
 			r.Get("/google/callback", api.GoogleOAuthCallback)
 			r.With(authMiddleware).Get("/me", api.Me)
+
+			// Password management
+			r.Post("/forgot-password", api.ForgotPassword)
+			r.Post("/reset-password", api.ResetPassword)
+			r.Post("/verify-email", api.VerifyEmail)
 		})
 
 		r.With(authMiddleware).Route("/users", func(r chi.Router) {
@@ -110,6 +116,20 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 				r.Get("/hydration/stats", api.HydrationStats)
 				r.Post("/hydration/logs", api.LogHydration)
 				r.Delete("/hydration/logs/{logID}", api.DeleteHydrationLog)
+
+				// Weather endpoints
+				r.Get("/weather/current", api.GetCurrentWeather)
+				r.Post("/weather", api.SaveWeatherData)
+				r.Get("/weather/history", api.GetWeatherHistory)
+
+				// Security endpoints
+				r.Post("/change-password", api.ChangePassword)
+				r.Post("/set-password", api.SetPassword)
+				r.Delete("/password", api.RemovePassword)
+				r.Post("/send-verification", api.SendEmailVerification)
+				r.Post("/enable-2fa", api.Enable2FA)
+				r.Post("/verify-2fa", api.Verify2FA)
+				r.Post("/disable-2fa", api.Disable2FA)
 			})
 		})
 	})

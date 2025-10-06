@@ -20,15 +20,22 @@ import (
 )
 
 var (
-	ErrUserAlreadyExists   = errors.New("user already exists")
-	ErrInvalidCredentials  = errors.New("invalid email or password")
-	ErrGoogleOAuthDisabled = errors.New("google oauth is not configured")
+	ErrUserAlreadyExists    = errors.New("user already exists")
+	ErrInvalidCredentials   = errors.New("invalid email or password")
+	ErrGoogleOAuthDisabled  = errors.New("google oauth is not configured")
+	ErrEmailNotVerified     = errors.New("email address is not verified")
+	ErrAccountLocked        = errors.New("account is temporarily locked due to too many failed attempts")
+	ErrInvalidToken         = errors.New("invalid or expired token")
+	ErrTwoFactorRequired    = errors.New("two-factor authentication required")
+	ErrInvalidTwoFactorCode = errors.New("invalid two-factor authentication code")
 )
 
 type AuthService struct {
-	db          *gorm.DB
-	cfg         config.Config
-	oauthConfig *oauth2.Config
+	db           *gorm.DB
+	cfg          config.Config
+	oauthConfig  *oauth2.Config
+	emailService *EmailService
+	twoFAService *TwoFactorService
 }
 
 type TokenClaims struct {
@@ -48,16 +55,21 @@ func NewAuthService(db *gorm.DB, cfg config.Config) *AuthService {
 			ClientID:     cfg.GoogleClientID,
 			ClientSecret: cfg.GoogleClientSecret,
 			RedirectURL:  cfg.GoogleRedirectURL,
-			Scopes: []string{
-				"openid",
-				"https://www.googleapis.com/auth/userinfo.email",
-				"https://www.googleapis.com/auth/userinfo.profile",
-			},
-			Endpoint: google.Endpoint,
+			Scopes:       []string{"openid", "email", "profile"},
+			Endpoint:     google.Endpoint,
 		}
 	}
 
-	return &AuthService{db: db, cfg: cfg, oauthConfig: oauthCfg}
+	emailService := NewEmailService(cfg)
+	twoFAService := NewTwoFactorService("Archer Aqua")
+
+	return &AuthService{
+		db:           db,
+		cfg:          cfg,
+		oauthConfig:  oauthCfg,
+		emailService: emailService,
+		twoFAService: twoFAService,
+	}
 }
 
 func (s *AuthService) Register(ctx context.Context, email, password, displayName string) (*models.User, string, bool, error) {
@@ -135,6 +147,10 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (*models.User, string, bool, error) {
+	return s.LoginWithTwoFactor(ctx, email, password, nil)
+}
+
+func (s *AuthService) LoginWithTwoFactor(ctx context.Context, email, password string, twoFactorCode *string) (*models.User, string, bool, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || strings.TrimSpace(password) == "" {
 		return nil, "", false, ErrInvalidCredentials
@@ -151,6 +167,36 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*model
 
 	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)); err != nil {
 		return nil, "", false, ErrInvalidCredentials
+	}
+
+	// Check if 2FA is enabled and required
+	if user.TwoFactorEnabled {
+		if twoFactorCode == nil || *twoFactorCode == "" {
+			return nil, "", false, ErrTwoFactorRequired
+		}
+
+		// Validate 2FA code
+		valid := false
+		if user.TwoFactorSecret != nil {
+			valid = s.twoFAService.ValidateCode(*user.TwoFactorSecret, *twoFactorCode)
+		}
+
+		// If regular code didn't work, try backup codes
+		if !valid && user.TwoFactorBackupCodes != nil {
+			isBackupValid, updatedCodes, err := s.twoFAService.ValidateBackupCode(*user.TwoFactorBackupCodes, *twoFactorCode)
+			if err == nil && isBackupValid {
+				valid = true
+				// Update backup codes
+				if updatedCodesJSON, err := s.twoFAService.EncodeBackupCodes(updatedCodes); err == nil {
+					user.TwoFactorBackupCodes = &updatedCodesJSON
+					s.db.WithContext(ctx).Save(&user)
+				}
+			}
+		}
+
+		if !valid {
+			return nil, "", false, ErrInvalidTwoFactorCode
+		}
 	}
 
 	token, err := s.generateToken(&user)
@@ -404,4 +450,299 @@ func SanitizeRedirect(base string, redirect string) string {
 	}
 
 	return target.String()
+}
+
+// ChangePassword changes a user's password
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Verify current password if user has one
+	if user.PasswordHash != nil {
+		if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(currentPassword)); err != nil {
+			return ErrInvalidCredentials
+		}
+	}
+
+	// Hash new password
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	hashString := string(hash)
+	user.PasswordHash = &hashString
+
+	return s.db.WithContext(ctx).Save(&user).Error
+}
+
+// SetPassword sets a password for OAuth users
+func (s *AuthService) SetPassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Hash password
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	hashString := string(hash)
+	user.PasswordHash = &hashString
+
+	return s.db.WithContext(ctx).Save(&user).Error
+}
+
+// RemovePassword removes password for OAuth users
+func (s *AuthService) RemovePassword(ctx context.Context, userID uuid.UUID) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Can only remove password if user has Google OAuth
+	if user.GoogleSubject == nil {
+		return fmt.Errorf("cannot remove password without alternative authentication method")
+	}
+
+	user.PasswordHash = nil
+	return s.db.WithContext(ctx).Save(&user).Error
+}
+
+// SendEmailVerification sends an email verification link
+func (s *AuthService) SendEmailVerification(ctx context.Context, userID uuid.UUID) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	if user.EmailVerified {
+		return fmt.Errorf("email is already verified")
+	}
+
+	// Generate verification token
+	token, err := GenerateSecureToken(32)
+	if err != nil {
+		return fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	// Set token expiry (24 hours)
+	expiry := time.Now().Add(24 * time.Hour)
+	user.EmailVerificationToken = &token
+	user.EmailVerificationExpiry = &expiry
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return fmt.Errorf("failed to save verification token: %w", err)
+	}
+
+	// Send email
+	return s.emailService.SendVerificationEmail(user.Email, user.DisplayName, token)
+}
+
+// VerifyEmail verifies an email address using a token
+func (s *AuthService) VerifyEmail(ctx context.Context, token string) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("email_verification_token = ?", token).First(&user).Error; err != nil {
+		return ErrInvalidToken
+	}
+
+	// Check if token is expired
+	if user.EmailVerificationExpiry != nil && time.Now().After(*user.EmailVerificationExpiry) {
+		return ErrInvalidToken
+	}
+
+	// Mark email as verified
+	user.EmailVerified = true
+	user.EmailVerificationToken = nil
+	user.EmailVerificationExpiry = nil
+
+	return s.db.WithContext(ctx).Save(&user).Error
+}
+
+// ForgotPassword initiates password reset flow
+func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		// Don't reveal if email exists
+		return nil
+	}
+
+	// Only send reset if user has a password
+	if user.PasswordHash == nil {
+		return nil
+	}
+
+	// Generate reset token
+	token, err := GenerateSecureToken(32)
+	if err != nil {
+		return fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	// Set token expiry (1 hour)
+	expiry := time.Now().Add(1 * time.Hour)
+	user.PasswordResetToken = &token
+	user.PasswordResetExpiry = &expiry
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return fmt.Errorf("failed to save reset token: %w", err)
+	}
+
+	// Send email
+	return s.emailService.SendPasswordResetEmail(user.Email, user.DisplayName, token)
+}
+
+// ResetPassword resets password using a token
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("password_reset_token = ?", token).First(&user).Error; err != nil {
+		return ErrInvalidToken
+	}
+
+	// Check if token is expired
+	if user.PasswordResetExpiry != nil && time.Now().After(*user.PasswordResetExpiry) {
+		return ErrInvalidToken
+	}
+
+	// Hash new password
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	hashString := string(hash)
+	user.PasswordHash = &hashString
+	user.PasswordResetToken = nil
+	user.PasswordResetExpiry = nil
+
+	return s.db.WithContext(ctx).Save(&user).Error
+}
+
+// Enable2FA enables two-factor authentication for a user
+func (s *AuthService) Enable2FA(ctx context.Context, userID uuid.UUID) (*string, *string, []string, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return nil, nil, nil, fmt.Errorf("user not found")
+	}
+
+	if user.TwoFactorEnabled {
+		return nil, nil, nil, fmt.Errorf("two-factor authentication is already enabled")
+	}
+
+	// Generate 2FA secret
+	key, err := s.twoFAService.GenerateSecret(user.Email)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to generate 2FA secret: %w", err)
+	}
+
+	// Generate backup codes
+	backupCodes, err := s.twoFAService.GenerateBackupCodes(8)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to generate backup codes: %w", err)
+	}
+
+	// Store secret (not yet enabled)
+	secret := key.Secret()
+	user.TwoFactorSecret = &secret
+
+	// Store backup codes
+	backupCodesJSON, err := s.twoFAService.EncodeBackupCodes(backupCodes)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to encode backup codes: %w", err)
+	}
+	user.TwoFactorBackupCodes = &backupCodesJSON
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to save 2FA setup: %w", err)
+	}
+
+	totpURL := s.twoFAService.GetTOTPURL(key)
+	return &secret, &totpURL, backupCodes, nil
+}
+
+// Verify2FA verifies and enables 2FA with a code
+func (s *AuthService) Verify2FA(ctx context.Context, userID uuid.UUID, code string) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	if user.TwoFactorSecret == nil {
+		return fmt.Errorf("2FA setup not initiated")
+	}
+
+	// Validate code
+	if !s.twoFAService.ValidateCode(*user.TwoFactorSecret, code) {
+		return ErrInvalidTwoFactorCode
+	}
+
+	// Enable 2FA
+	user.TwoFactorEnabled = true
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return fmt.Errorf("failed to enable 2FA: %w", err)
+	}
+
+	// Send backup codes via email
+	if s.emailService.IsEnabled() && user.TwoFactorBackupCodes != nil {
+		var backupCodes []string
+		if err := json.Unmarshal([]byte(*user.TwoFactorBackupCodes), &backupCodes); err == nil {
+			s.emailService.SendTwoFactorBackupCodes(user.Email, user.DisplayName, backupCodes)
+		}
+	}
+
+	return nil
+}
+
+// Disable2FA disables two-factor authentication
+func (s *AuthService) Disable2FA(ctx context.Context, userID uuid.UUID, password, code string) error {
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	if !user.TwoFactorEnabled {
+		return fmt.Errorf("two-factor authentication is not enabled")
+	}
+
+	// Verify password if user has one
+	if user.PasswordHash != nil {
+		if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)); err != nil {
+			return ErrInvalidCredentials
+		}
+	}
+
+	// Verify 2FA code or backup code
+	valid := false
+	if user.TwoFactorSecret != nil {
+		valid = s.twoFAService.ValidateCode(*user.TwoFactorSecret, code)
+	}
+
+	// If regular code didn't work, try backup codes
+	if !valid && user.TwoFactorBackupCodes != nil {
+		isBackupValid, updatedCodes, err := s.twoFAService.ValidateBackupCode(*user.TwoFactorBackupCodes, code)
+		if err == nil && isBackupValid {
+			valid = true
+			// Update backup codes
+			if updatedCodesJSON, err := s.twoFAService.EncodeBackupCodes(updatedCodes); err == nil {
+				user.TwoFactorBackupCodes = &updatedCodesJSON
+			}
+		}
+	}
+
+	if !valid {
+		return ErrInvalidTwoFactorCode
+	}
+
+	// Disable 2FA
+	user.TwoFactorEnabled = false
+	user.TwoFactorSecret = nil
+	user.TwoFactorBackupCodes = nil
+
+	return s.db.WithContext(ctx).Save(&user).Error
 }

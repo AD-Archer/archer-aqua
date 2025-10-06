@@ -9,24 +9,32 @@ import (
 )
 
 type Config struct {
-	Port               string
-	DatabaseURL        string
-	DatabaseHost       string
-	DatabasePort       string
-	DatabaseName       string
-	DatabaseUser       string
-	DatabasePassword   string
-	DatabaseSSLMode    string
-	DatabaseTimeZone   string
-	AllowedOrigins     []string
-	JWTSecret          string
-	JWTIssuer          string
-	JWTExpiry          time.Duration
-	FrontendURL        string
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	GoogleOAuthEnabled bool
+	Port                      string
+	DatabaseURL               string
+	DatabaseHost              string
+	DatabasePort              string
+	DatabaseName              string
+	DatabaseUser              string
+	DatabasePassword          string
+	DatabaseSSLMode           string
+	DatabaseTimeZone          string
+	AllowedOrigins            []string
+	JWTSecret                 string
+	JWTIssuer                 string
+	JWTExpiry                 time.Duration
+	FrontendURL               string
+	GoogleClientID            string
+	GoogleClientSecret        string
+	GoogleRedirectURL         string
+	GoogleOAuthEnabled        bool
+	SMTPHost                  string
+	SMTPPort                  string
+	SMTPUsername              string
+	SMTPPassword              string
+	SMTPFromEmail             string
+	SMTPFromName              string
+	SMTPEnabled               bool
+	EmailVerificationRequired bool
 }
 
 func Load() (Config, error) {
@@ -84,25 +92,43 @@ func Load() (Config, error) {
 	googleRedirectURL := valueOrDefault("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback")
 	googleEnabled := googleClientID != "" && googleClientSecret != ""
 
+	// SMTP Configuration
+	smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST"))
+	smtpPort := valueOrDefault("SMTP_PORT", "587")
+	smtpUsername := strings.TrimSpace(os.Getenv("SMTP_USERNAME"))
+	smtpPassword := strings.TrimSpace(os.Getenv("SMTP_PASSWORD"))
+	smtpFromEmail := valueOrDefault("SMTP_FROM_EMAIL", smtpUsername)
+	smtpFromName := valueOrDefault("SMTP_FROM_NAME", "Archer Aqua")
+	smtpEnabled := smtpHost != "" && smtpUsername != "" && smtpPassword != ""
+	emailVerificationRequired := valueOrDefault("EMAIL_VERIFICATION_REQUIRED", "false") == "true"
+
 	return Config{
-		Port:               port,
-		DatabaseURL:        databaseURL,
-		DatabaseHost:       host,
-		DatabasePort:       portStr,
-		DatabaseName:       dbName,
-		DatabaseUser:       user,
-		DatabasePassword:   password,
-		DatabaseSSLMode:    sslMode,
-		DatabaseTimeZone:   timezone,
-		AllowedOrigins:     allowedOrigins,
-		JWTSecret:          jwtSecret,
-		JWTIssuer:          jwtIssuer,
-		JWTExpiry:          jwtExpiry,
-		FrontendURL:        frontendURL,
-		GoogleClientID:     googleClientID,
-		GoogleClientSecret: googleClientSecret,
-		GoogleRedirectURL:  googleRedirectURL,
-		GoogleOAuthEnabled: googleEnabled,
+		Port:                      port,
+		DatabaseURL:               databaseURL,
+		DatabaseHost:              host,
+		DatabasePort:              portStr,
+		DatabaseName:              dbName,
+		DatabaseUser:              user,
+		DatabasePassword:          password,
+		DatabaseSSLMode:           sslMode,
+		DatabaseTimeZone:          timezone,
+		AllowedOrigins:            allowedOrigins,
+		JWTSecret:                 jwtSecret,
+		JWTIssuer:                 jwtIssuer,
+		JWTExpiry:                 jwtExpiry,
+		FrontendURL:               frontendURL,
+		GoogleClientID:            googleClientID,
+		GoogleClientSecret:        googleClientSecret,
+		GoogleRedirectURL:         googleRedirectURL,
+		GoogleOAuthEnabled:        googleEnabled,
+		SMTPHost:                  smtpHost,
+		SMTPPort:                  smtpPort,
+		SMTPUsername:              smtpUsername,
+		SMTPPassword:              smtpPassword,
+		SMTPFromEmail:             smtpFromEmail,
+		SMTPFromName:              smtpFromName,
+		SMTPEnabled:               smtpEnabled,
+		EmailVerificationRequired: emailVerificationRequired,
 	}, nil
 }
 

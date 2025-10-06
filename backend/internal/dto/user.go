@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/AD-Archer/archer-aqua/backend/internal/models"
+	"github.com/AD-Archer/archer-aqua/backend/internal/utils"
 	"github.com/google/uuid"
 )
 
@@ -54,8 +55,13 @@ type UpdateUserRequest struct {
 type UserResponse struct {
 	ID                        uuid.UUID       `json:"id"`
 	Email                     string          `json:"email"`
+	EmailVerified             bool            `json:"emailVerified"`
 	DisplayName               string          `json:"displayName"`
-	WeightKg                  float64         `json:"weightKg"`
+	HasPassword               bool            `json:"hasPassword"`
+	IsGoogleUser              bool            `json:"isGoogleUser"`
+	TwoFactorEnabled          bool            `json:"twoFactorEnabled"`
+	WeightKg                  float64         `json:"weight"`
+	WeightUnit                string          `json:"weightUnit"`
 	Age                       int             `json:"age"`
 	Gender                    string          `json:"gender"`
 	ActivityLevel             string          `json:"activityLevel"`
@@ -67,6 +73,7 @@ type UserResponse struct {
 	TemperatureUnit           string          `json:"temperatureUnit"`
 	ProgressWheelStyle        string          `json:"progressWheelStyle"`
 	WeatherAdjustmentsEnabled bool            `json:"weatherAdjustmentsEnabled"`
+	LastLoginAt               *time.Time      `json:"lastLoginAt"`
 	CreatedAt                 time.Time       `json:"createdAt"`
 	UpdatedAt                 time.Time       `json:"updatedAt"`
 }
@@ -77,15 +84,28 @@ type UserSummaryResponse struct {
 }
 
 func NewUserResponse(user models.User) UserResponse {
+	// Convert weight back to user's preferred unit, fallback to kg if conversion fails
+	weightInPreferredUnit := user.WeightKg
+	if user.WeightUnit != "" {
+		if converted, err := utils.ConvertWeightFromKg(user.WeightKg, user.WeightUnit); err == nil {
+			weightInPreferredUnit = converted
+		}
+	}
+
 	return UserResponse{
-		ID:            user.ID,
-		Email:         user.Email,
-		DisplayName:   user.DisplayName,
-		WeightKg:      user.WeightKg,
-		Age:           user.Age,
-		Gender:        user.Gender,
-		ActivityLevel: user.ActivityLevel,
-		Timezone:      user.Timezone,
+		ID:               user.ID,
+		Email:            user.Email,
+		EmailVerified:    user.EmailVerified,
+		DisplayName:      user.DisplayName,
+		HasPassword:      user.PasswordHash != nil,
+		IsGoogleUser:     user.GoogleSubject != nil,
+		TwoFactorEnabled: user.TwoFactorEnabled,
+		WeightKg:         weightInPreferredUnit,
+		WeightUnit:       user.WeightUnit,
+		Age:              user.Age,
+		Gender:           user.Gender,
+		ActivityLevel:    user.ActivityLevel,
+		Timezone:         user.Timezone,
 		Location: LocationPayload{
 			City:      user.LocationCity,
 			Region:    user.LocationRegion,
@@ -99,6 +119,7 @@ func NewUserResponse(user models.User) UserResponse {
 		TemperatureUnit:           user.TemperatureUnit,
 		ProgressWheelStyle:        user.ProgressWheelStyle,
 		WeatherAdjustmentsEnabled: user.WeatherAdjustmentsEnabled,
+		LastLoginAt:               user.LastLoginAt,
 		CreatedAt:                 user.CreatedAt,
 		UpdatedAt:                 user.UpdatedAt,
 	}

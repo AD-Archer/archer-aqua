@@ -77,8 +77,13 @@ export interface ApiVolumePayload {
 export interface ApiUserResponse {
   id: string;
   email: string;
+  emailVerified: boolean;
   displayName: string;
-  weightKg: number;
+  hasPassword: boolean;
+  isGoogleUser: boolean;
+  twoFactorEnabled: boolean;
+  weight: number;
+  weightUnit: string;
   age: number;
   gender: string;
   activityLevel: string;
@@ -90,6 +95,7 @@ export interface ApiUserResponse {
   temperatureUnit: string;
   progressWheelStyle: string;
   weatherAdjustmentsEnabled: boolean;
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -151,6 +157,11 @@ export interface ApiAuthResponse {
   hasProfile: boolean;
 }
 
+export interface ApiTwoFactorRequiredResponse {
+  requiresTwoFactor: boolean;
+  message: string;
+}
+
 export interface ApiAuthStateResponse {
   user: ApiUserResponse;
   hasProfile: boolean;
@@ -165,6 +176,7 @@ export interface RegisterPayload {
 export interface LoginPayload {
   email: string;
   password: string;
+  twoFactorCode?: string;
 }
 
 export interface CreateUserPayload {
@@ -198,6 +210,43 @@ export interface UpdateUserPayload {
   customGoalLiters?: number | null;
 }
 
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface SetPasswordPayload {
+  newPassword: string;
+}
+
+export interface VerifyEmailPayload {
+  token: string;
+}
+
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  newPassword: string;
+}
+
+export interface Enable2FAResponse {
+  qrCodeUrl: string;
+  secret: string;
+  backupCodes: string[];
+}
+
+export interface Verify2FAPayload {
+  code: string;
+}
+
+export interface Disable2FAPayload {
+  password: string;
+  code: string;
+}
+
 export interface CreateDrinkPayload {
   name: string;
   type: string;
@@ -225,6 +274,41 @@ export interface LogHydrationPayload {
   timezone?: string;
   source?: string;
   notes?: string;
+}
+
+export interface ApiWeatherResponse {
+  id: string;
+  latitude: number;
+  longitude: number;
+  temperature: number;
+  humidity: number;
+  condition: string;
+  windSpeed: number;
+  windDirection: number;
+  pressure: number;
+  visibility: number;
+  uvIndex: number;
+  feelsLike: number;
+  source: string;
+  fetchedAt: string;
+  expiresAt: string;
+  refreshCount: number;
+}
+
+export interface CreateWeatherPayload {
+  latitude: number;
+  longitude: number;
+  temperature: number;
+  humidity: number;
+  condition: string;
+  windSpeed: number;
+  windDirection: number;
+  pressure: number;
+  visibility: number;
+  uvIndex: number;
+  feelsLike: number;
+  source: string;
+  sourceDataId: string;
 }
 
 export const apiConfig = {
@@ -287,6 +371,23 @@ export async function deleteHydrationLog(userId: string, logId: string) {
   });
 }
 
+// Weather API functions
+export async function getCurrentWeather(userId: string, lat: number, lon: number) {
+  return request<ApiWeatherResponse>(`/api/users/${userId}/weather/current?lat=${lat}&lon=${lon}`);
+}
+
+export async function saveWeatherData(userId: string, payload: CreateWeatherPayload) {
+  return request<ApiWeatherResponse>(`/api/users/${userId}/weather`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getWeatherHistory(userId: string, limit?: number) {
+  const params = limit ? `?limit=${limit}` : '';
+  return request<ApiWeatherResponse[]>(`/api/users/${userId}/weather/history${params}`);
+}
+
 export async function getDailySummary(userId: string, date: string, timezone: string) {
   const params = new URLSearchParams({ date, timezone });
   return request<ApiDailySummaryResponse>(`/api/users/${userId}/hydration/daily?${params.toString()}`);
@@ -335,12 +436,21 @@ export async function registerUser(payload: RegisterPayload) {
   });
 }
 
-export async function loginUser(payload: LoginPayload) {
-  return request<ApiAuthResponse>(`/api/auth/login`, {
+export async function loginUser(payload: LoginPayload): Promise<ApiAuthResponse | ApiTwoFactorRequiredResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
-    skipAuth: true,
   });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 export async function getAuthState() {
@@ -357,4 +467,77 @@ export function getGoogleOAuthUrl(redirectUrl: string): string {
   }
   const suffix = params.toString();
   return `${API_BASE_URL}/api/auth/google/login${suffix ? `?${params}` : ''}`;
+}
+
+// Password Management
+export async function changePassword(userId: string, payload: ChangePasswordPayload) {
+  return request<{ message: string }>(`/api/users/${userId}/change-password`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function setPassword(userId: string, payload: SetPasswordPayload) {
+  return request<{ message: string }>(`/api/users/${userId}/set-password`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removePassword(userId: string) {
+  return request<{ message: string }>(`/api/users/${userId}/password`, {
+    method: 'DELETE',
+  });
+}
+
+export async function forgotPassword(payload: ForgotPasswordPayload) {
+  return request<{ message: string }>(`/api/auth/forgot-password`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipAuth: true,
+  });
+}
+
+export async function resetPassword(payload: ResetPasswordPayload) {
+  return request<{ message: string }>(`/api/auth/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipAuth: true,
+  });
+}
+
+// Email Verification
+export async function sendEmailVerification(userId: string) {
+  return request<{ message: string; sent: boolean }>(`/api/users/${userId}/send-verification`, {
+    method: 'POST',
+  });
+}
+
+export async function verifyEmail(payload: VerifyEmailPayload) {
+  return request<{ message: string }>(`/api/auth/verify-email`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipAuth: true,
+  });
+}
+
+// Two-Factor Authentication
+export async function enable2FA(userId: string) {
+  return request<Enable2FAResponse>(`/api/users/${userId}/enable-2fa`, {
+    method: 'POST',
+  });
+}
+
+export async function verify2FA(userId: string, payload: Verify2FAPayload) {
+  return request<{ message: string }>(`/api/users/${userId}/verify-2fa`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function disable2FA(userId: string, payload: Disable2FAPayload) {
+  return request<{ message: string }>(`/api/users/${userId}/disable-2fa`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

@@ -12,11 +12,20 @@ type User struct {
 	ID                        uuid.UUID `gorm:"type:uuid;primaryKey"`
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
-	Email                     string `gorm:"uniqueIndex"`
+	Email                     string  `gorm:"uniqueIndex"`
+	EmailVerified             bool    `gorm:"default:false"`
+	EmailVerificationToken    *string `gorm:"size:255"`
+	EmailVerificationExpiry   *time.Time
 	DisplayName               string
 	PasswordHash              *string `gorm:"size:255"`
 	GoogleSubject             *string `gorm:"size:255;uniqueIndex"`
+	TwoFactorEnabled          bool    `gorm:"default:false"`
+	TwoFactorSecret           *string `gorm:"size:255"`
+	TwoFactorBackupCodes      *string `gorm:"type:text"` // JSON array of backup codes
+	PasswordResetToken        *string `gorm:"size:255"`
+	PasswordResetExpiry       *time.Time
 	WeightKg                  float64
+	WeightUnit                string `gorm:"size:32"`
 	Age                       int
 	Gender                    string `gorm:"size:32"`
 	ActivityLevel             string `gorm:"size:64"`
@@ -33,6 +42,9 @@ type User struct {
 	ProgressWheelStyle        string `gorm:"size:64"`
 	WeatherAdjustmentsEnabled bool
 	TimezoneLastConfirmedAt   *time.Time
+	LastLoginAt               *time.Time
+	LoginAttempts             int `gorm:"default:0"`
+	LockedUntil               *time.Time
 	Drinks                    []Drink        `gorm:"constraint:OnDelete:CASCADE"`
 	HydrationLogs             []HydrationLog `gorm:"constraint:OnDelete:CASCADE"`
 }

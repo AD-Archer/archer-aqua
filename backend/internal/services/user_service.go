@@ -67,6 +67,7 @@ func (s *UserService) CreateUser(ctx context.Context, input dto.CreateUserReques
 
 	user.DisplayName = defaultString(input.DisplayName, user.DisplayName)
 	user.WeightKg = weightKg
+	user.WeightUnit = defaultString(input.Weight.Unit, "kg")
 	user.Age = input.Age
 	user.Gender = input.Gender
 	user.ActivityLevel = input.ActivityLevel
@@ -106,6 +107,7 @@ func (s *UserService) UpdateUser(ctx context.Context, userID uuid.UUID, input dt
 			return nil, err
 		}
 		user.WeightKg = weightKg
+		user.WeightUnit = input.Weight.Unit
 	}
 	if input.Age != nil {
 		user.Age = *input.Age

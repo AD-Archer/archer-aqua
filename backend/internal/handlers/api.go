@@ -11,15 +11,17 @@ type API struct {
 	drinks    *services.DrinkService
 	hydration *services.HydrationService
 	auth      *services.AuthService
+	weather   *services.WeatherService
 	logger    *slog.Logger
 }
 
-func NewAPI(userService *services.UserService, drinkService *services.DrinkService, hydrationService *services.HydrationService, authService *services.AuthService, logger *slog.Logger) *API {
+func NewAPI(userService *services.UserService, drinkService *services.DrinkService, hydrationService *services.HydrationService, authService *services.AuthService, weatherService *services.WeatherService, logger *slog.Logger) *API {
 	return &API{
 		users:     userService,
 		drinks:    drinkService,
 		hydration: hydrationService,
 		auth:      authService,
+		weather:   weatherService,
 		logger:    logger,
 	}
 }

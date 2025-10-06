@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, type LucideIcon } from 'lucide-react';
+import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, Copy, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, saveCustomDrink, deleteCustomDrink, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId } from '@/lib/storage';
@@ -19,7 +20,7 @@ import { WeatherCard } from '@/components/WeatherCard';
 import { LocationPicker } from '@/components/LocationPicker';
 import { WeeklyWeatherView } from '@/components/WeeklyWeatherView';
 import { backendIsEnabled, ensureBackendUser, syncProfileToBackend } from '@/lib/backend';
-import { getUser as getBackendUser, updateUser as updateBackendUser, getAuthState, deleteDrink, isApiEnabled } from '@/lib/api';
+import { getUser as getBackendUser, updateUser as updateBackendUser, getAuthState, deleteDrink, createDrink, updateDrink, isApiEnabled, changePassword, setPassword, removePassword, sendEmailVerification, enable2FA, verify2FA, disable2FA } from '@/lib/api';
 import { getLocationPreference } from '@/lib/weather';
 
 const CUSTOM_DRINK_ICONS = [
@@ -30,6 +31,12 @@ const CUSTOM_DRINK_ICONS = [
 
 export default function Settings() {
   const navigate = useNavigate();
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [isGoogleUser, setIsGoogleUser] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [weight, setWeight] = useState('70');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [age, setAge] = useState('30');
@@ -45,6 +52,19 @@ export default function Settings() {
   const [isAddDrinkDialogOpen, setIsAddDrinkDialogOpen] = useState(false);
   const [useWeatherAdjustment, setUseWeatherAdjustment] = useState(true);
   const [progressWheelStyle, setProgressWheelStyle] = useState<ProgressWheelStyle>('drink-colors');
+  
+  // Security state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [qrCodeImage, setQrCodeImage] = useState('');
+  const [twoFactorSecret, setTwoFactorSecret] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [show2FADialog, setShow2FADialog] = useState(false);
+  const [show2FASetup, setShow2FASetup] = useState(false);
   
   // Custom drink form state
   const [newDrinkName, setNewDrinkName] = useState('');
@@ -84,14 +104,37 @@ export default function Settings() {
               if (response?.user) {
                 const backendUser = response.user;
                 
+                // Set basic profile info
+                setDisplayName(backendUser.displayName);
+                setEmail(backendUser.email);
+                setEmailVerified(backendUser.emailVerified);
+                setHasPassword(backendUser.hasPassword);
+                setIsGoogleUser(backendUser.isGoogleUser);
+                setTwoFactorEnabled(backendUser.twoFactorEnabled);
+                
                 // Update local state from backend
-                const displayWeight = savedWeightUnit === 'lbs' 
-                  ? kgToLbs(backendUser.weightKg) 
-                  : backendUser.weightKg;
-                setWeight(displayWeight.toFixed(1));
+                setWeight(backendUser.weight.toFixed(1));
+                setWeightUnit((backendUser.weightUnit as WeightUnit) || 'kg');
                 setAge(backendUser.age.toString());
                 setGender(backendUser.gender as Gender);
                 setActivityLevel(backendUser.activityLevel as ActivityLevel);
+                
+                // Load custom drinks from backend
+                if (response.drinks) {
+                  const backendCustomDrinks: CustomDrinkType[] = response.drinks
+                    .filter(drink => drink.source === 'custom')
+                    .map(drink => ({
+                      id: drink.id,
+                      name: drink.name,
+                      color: drink.colorHex || '#3b82f6',
+                      hydrationMultiplier: drink.hydrationMultiplier,
+                      icon: 'GlassWater', // Default icon since backend doesn't store icons yet
+                    }));
+                  setCustomDrinks(backendCustomDrinks);
+                  
+                  // Also update local storage to keep sync
+                  backendCustomDrinks.forEach(drink => saveCustomDrink(drink));
+                }
                 
                 // Set unit preferences from backend
                 const volumeUnitMap: Record<string, VolumeUnit> = {
@@ -132,13 +175,13 @@ export default function Settings() {
                 const profile: UserProfile = {
                   name: backendUser.displayName,
                   email: backendUser.email,
-                  weight: backendUser.weightKg,
+                  weight: backendUser.weight,
                   age: backendUser.age,
                   gender: backendUser.gender as Gender,
                   activityLevel: backendUser.activityLevel as ActivityLevel,
                   climate: 'moderate',
                   createdAt: new Date(backendUser.createdAt),
-                  preferredWeightUnit: savedWeightUnit,
+                  preferredWeightUnit: (backendUser.weightUnit as WeightUnit) || 'kg',
                   preferredTemperatureUnit: tempUnit,
                   timezone: backendUser.timezone,
                 };
@@ -243,6 +286,26 @@ export default function Settings() {
     // Sync to backend if enabled
     if (backendIsEnabled()) {
       try {
+        const userId = getBackendUserId();
+        if (userId) {
+          // Update backend with all profile data including display name
+          await updateBackendUser(userId, {
+            displayName: displayName,
+            weight: {
+              value: weightValue,
+              unit: weightUnit
+            },
+            age: ageNum,
+            gender,
+            activityLevel,
+            timezone,
+            volumeUnit: unitPreference,
+            temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
+            progressWheelStyle: progressWheelStyle.replace('-', '_'),
+            weatherAdjustmentsEnabled: useWeatherAdjustment,
+            customGoalLiters: usePersonalizedGoal ? null : parseFloat(manualGoal)
+          });
+        }
         await syncProfileToBackend();
         toast.success('Profile synced to backend!');
       } catch (error) {
@@ -345,7 +408,7 @@ export default function Settings() {
     toast.success(`Timezone updated to ${tz}`);
   };
 
-  const handleAddCustomDrink = () => {
+  const handleAddCustomDrink = async () => {
     if (!newDrinkName.trim()) {
       toast.error('Please enter a drink name');
       return;
@@ -359,9 +422,31 @@ export default function Settings() {
       icon: newDrinkIcon,
     };
 
-    saveCustomDrink(newDrink);
-    setCustomDrinks([...customDrinks, newDrink]);
-    toast.success(`Custom drink "${newDrink.name}" added!`);
+    try {
+      // If API is enabled and user is authenticated, save to backend first
+      if (isApiEnabled() && isAuthenticated()) {
+        const userId = getBackendUserId();
+        if (userId) {
+          const backendDrink = await createDrink(userId, {
+            name: newDrink.name,
+            type: 'beverage',
+            hydrationMultiplier: newDrink.hydrationMultiplier,
+            colorHex: newDrink.color,
+            source: 'custom'
+          });
+          // Update the drink ID to match backend
+          newDrink.id = backendDrink.id;
+        }
+      }
+      
+      saveCustomDrink(newDrink);
+      setCustomDrinks([...customDrinks, newDrink]);
+      toast.success(`Custom drink "${newDrink.name}" added!`);
+    } catch (error) {
+      console.error('Failed to create drink:', error);
+      toast.error(`Failed to create "${newDrink.name}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return;
+    }
     
     // Reset form
     setNewDrinkName('');
@@ -399,7 +484,7 @@ export default function Settings() {
     setIsEditDrinkDialogOpen(true);
   };
 
-  const handleUpdateCustomDrink = () => {
+  const handleUpdateCustomDrink = async () => {
     if (!editingDrink) return;
 
     if (!editingDrink.name.trim()) {
@@ -407,11 +492,171 @@ export default function Settings() {
       return;
     }
 
-    saveCustomDrink(editingDrink);
-    setCustomDrinks(customDrinks.map(d => d.id === editingDrink.id ? editingDrink : d));
-    toast.success(`Updated "${editingDrink.name}"`);
+    try {
+      // If API is enabled and user is authenticated, update backend first
+      if (isApiEnabled() && isAuthenticated()) {
+        const userId = getBackendUserId();
+        if (userId) {
+          await updateDrink(userId, editingDrink.id, {
+            name: editingDrink.name,
+            type: 'beverage',
+            hydrationMultiplier: editingDrink.hydrationMultiplier,
+            colorHex: editingDrink.color,
+          });
+        }
+      }
+
+      saveCustomDrink(editingDrink);
+      setCustomDrinks(customDrinks.map(d => d.id === editingDrink.id ? editingDrink : d));
+      toast.success(`Updated "${editingDrink.name}"`);
+    } catch (error) {
+      console.error('Failed to update drink:', error);
+      toast.error(`Failed to update "${editingDrink.name}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return;
+    }
+    
     setIsEditDrinkDialogOpen(false);
     setEditingDrink(null);
+  };
+
+  // Security handlers
+  const handleSendEmailVerification = async () => {
+    if (!isApiEnabled() || !isAuthenticated()) {
+      toast.error('Email verification not available');
+      return;
+    }
+
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        await sendEmailVerification(userId);
+        toast.success('Verification email sent! Check your inbox.');
+      }
+    } catch (error) {
+      console.error('Failed to send verification email:', error);
+      toast.error('Failed to send verification email');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.error('Please fill in all password fields');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters long');
+      return;
+    }
+
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        if (hasPassword) {
+          await changePassword(userId, { currentPassword, newPassword });
+        } else {
+          await setPassword(userId, { newPassword });
+        }
+        toast.success('Password updated successfully');
+        setShowPasswordDialog(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setHasPassword(true);
+      }
+    } catch (error) {
+      console.error('Failed to update password:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update password');
+    }
+  };
+
+  const handleRemovePassword = async () => {
+    if (!isGoogleUser) {
+      toast.error('Cannot remove password without alternative authentication method');
+      return;
+    }
+
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        await removePassword(userId);
+        toast.success('Password removed successfully');
+        setHasPassword(false);
+      }
+    } catch (error) {
+      console.error('Failed to remove password:', error);
+      toast.error('Failed to remove password');
+    }
+  };
+
+  const handleEnable2FA = async () => {
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        const response = await enable2FA(userId);
+        setQrCodeUrl(response.qrCodeUrl);
+        setTwoFactorSecret(response.secret);
+        setBackupCodes(response.backupCodes);
+        
+        // Generate QR code image from TOTP URL
+        try {
+          const qrDataURL = await QRCode.toDataURL(response.qrCodeUrl, {
+            width: 256,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+          setQrCodeImage(qrDataURL);
+        } catch (qrError) {
+          console.error('Failed to generate QR code:', qrError);
+        }
+        
+        setShow2FASetup(true);
+      }
+    } catch (error) {
+      console.error('Failed to enable 2FA:', error);
+      toast.error('Failed to enable 2FA');
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        await verify2FA(userId, { code: twoFactorCode });
+        toast.success('Two-factor authentication enabled successfully');
+        setTwoFactorEnabled(true);
+        setShow2FASetup(false);
+        setTwoFactorCode('');
+      }
+    } catch (error) {
+      console.error('Failed to verify 2FA:', error);
+      toast.error('Invalid verification code');
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        await disable2FA(userId, { password: currentPassword, code: twoFactorCode });
+        toast.success('Two-factor authentication disabled');
+        setTwoFactorEnabled(false);
+        setShow2FADialog(false);
+        setCurrentPassword('');
+        setTwoFactorCode('');
+      }
+    } catch (error) {
+      console.error('Failed to disable 2FA:', error);
+      toast.error('Failed to disable 2FA');
+    }
   };
 
   const handleWeatherAdjustmentChange = async (enabled: boolean) => {
@@ -515,6 +760,103 @@ export default function Settings() {
         </header>
 
         <div className="space-y-6">
+          {/* Account Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Information</CardTitle>
+              <CardDescription>
+                Manage your account details and authentication settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">Display Name</Label>
+                  <Input
+                    id="displayName"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Enter your display name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="email"
+                      value={email}
+                      readOnly
+                      className="bg-muted"
+                    />
+                    {!emailVerified && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleSendEmailVerification}
+                      >
+                        Verify
+                      </Button>
+                    )}
+                  </div>
+                  {emailVerified ? (
+                    <p className="text-xs text-green-600">✓ Verified</p>
+                  ) : (
+                    <p className="text-xs text-orange-600">⚠ Not verified</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Authentication Status */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Authentication</Label>
+                  <div className="text-sm space-y-1">
+                    {isGoogleUser && <p className="text-blue-600">✓ Google Sign-in</p>}
+                    {hasPassword ? (
+                      <p className="text-green-600">✓ Password</p>
+                    ) : (
+                      <p className="text-gray-500">No password set</p>
+                    )}
+                    {twoFactorEnabled ? (
+                      <p className="text-green-600">✓ Two-factor authentication</p>
+                    ) : (
+                      <p className="text-gray-500">Two-factor authentication disabled</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Security Actions</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {!hasPassword && (
+                      <Button variant="outline" size="sm" onClick={() => setShowPasswordDialog(true)}>
+                        Set Password
+                      </Button>
+                    )}
+                    {hasPassword && (
+                      <Button variant="outline" size="sm" onClick={() => setShowPasswordDialog(true)}>
+                        Change Password
+                      </Button>
+                    )}
+                    {hasPassword && isGoogleUser && (
+                      <Button variant="outline" size="sm" onClick={handleRemovePassword}>
+                        Remove Password
+                      </Button>
+                    )}
+                    {!twoFactorEnabled ? (
+                      <Button variant="outline" size="sm" onClick={handleEnable2FA}>
+                        Enable 2FA
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => setShow2FADialog(true)}>
+                        Disable 2FA
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Profile Settings */}
           <Card>
             <CardHeader>
@@ -1088,6 +1430,183 @@ export default function Settings() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Password Management Dialog */}
+        <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{hasPassword ? 'Change Password' : 'Set Password'}</DialogTitle>
+              <DialogDescription>
+                {hasPassword ? 'Update your account password' : 'Create a password for your account'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {hasPassword && (
+                <div className="space-y-2">
+                  <Label htmlFor="current-password">Current Password</Label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter your new password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your new password"
+                />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button variant="outline" onClick={() => setShowPasswordDialog(false)} className="flex-1">
+                  Cancel
+                </Button>
+                <Button onClick={handleChangePassword} className="flex-1">
+                  {hasPassword ? 'Change Password' : 'Set Password'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 2FA Setup Dialog */}
+        <Dialog open={show2FASetup} onOpenChange={setShow2FASetup}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Enable Two-Factor Authentication</DialogTitle>
+              <DialogDescription>
+                Scan the QR code with your authenticator app, then enter the verification code
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {(qrCodeImage || qrCodeUrl) && (
+                <div className="text-center space-y-4">
+                  <img 
+                    src={qrCodeImage || qrCodeUrl} 
+                    alt="2FA QR Code" 
+                    className="mx-auto w-48 h-48 border rounded" 
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium mb-2">Can't scan? Enter this code manually:</p>
+                    <div className="bg-muted p-2 rounded font-mono text-xs break-all flex justify-between items-center">
+                      <span>{twoFactorSecret}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(twoFactorSecret);
+                          toast.success('Secret copied to clipboard');
+                        }}
+                        className="h-auto p-1 ml-2"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="twofa-code">Verification Code</Label>
+                <Input
+                  id="twofa-code"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  placeholder="Enter 6-digit code"
+                  maxLength={6}
+                />
+              </div>
+              {backupCodes.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Backup Codes (Save these securely!)</Label>
+                  <div className="bg-muted p-3 rounded text-sm font-mono space-y-1 max-h-32 overflow-y-auto">
+                    {backupCodes.map((code, index) => (
+                      <div key={index} className="flex justify-between">
+                        <span>{code}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            navigator.clipboard.writeText(code);
+                            toast.success('Backup code copied to clipboard');
+                          }}
+                          className="h-auto p-1"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 pt-4">
+                <Button variant="outline" onClick={() => setShow2FASetup(false)} className="flex-1">
+                  Cancel
+                </Button>
+                <Button onClick={handleVerify2FA} className="flex-1">
+                  Verify & Enable
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 2FA Disable Dialog */}
+        <Dialog open={show2FADialog} onOpenChange={setShow2FADialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Disable Two-Factor Authentication</DialogTitle>
+              <DialogDescription>
+                Enter your password and a verification code to disable 2FA
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="disable-password">Password</Label>
+                <Input
+                  id="disable-password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="disable-code">Verification Code</Label>
+                <Input
+                  id="disable-code"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  placeholder="Enter 6-digit code or backup code"
+                />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button variant="outline" onClick={() => setShow2FADialog(false)} className="flex-1">
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDisable2FA} className="flex-1">
+                  Disable 2FA
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
     </>

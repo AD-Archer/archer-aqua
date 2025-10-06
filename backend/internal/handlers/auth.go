@@ -45,11 +45,19 @@ func (api *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, hasProfile, err := api.auth.Login(r.Context(), request.Email, request.Password)
+	user, token, hasProfile, err := api.auth.LoginWithTwoFactor(r.Context(), request.Email, request.Password, request.TwoFactorCode)
 	if err != nil {
 		switch {
 		case err == services.ErrInvalidCredentials:
 			respondError(w, http.StatusUnauthorized, err.Error())
+		case err == services.ErrTwoFactorRequired:
+			respondJSON(w, http.StatusAccepted, map[string]interface{}{
+				"requiresTwoFactor": true,
+				"message":           "Two-factor authentication required",
+			})
+			return
+		case err == services.ErrInvalidTwoFactorCode:
+			respondError(w, http.StatusUnauthorized, "invalid two-factor authentication code")
 		default:
 			logError(api.logger, "login user", err)
 			respondError(w, http.StatusBadRequest, err.Error())
@@ -148,4 +156,259 @@ func redirectWithError(w http.ResponseWriter, r *http.Request, authService *serv
 	}
 	target.RawQuery = url.Values{"error": []string{message}}.Encode()
 	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
+}
+
+// ChangePassword changes a user's password
+func (api *API) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	var request dto.ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.ChangePassword(r.Context(), userID, request.CurrentPassword, request.NewPassword); err != nil {
+		logError(api.logger, "change password", err)
+		if err == services.ErrInvalidCredentials {
+			respondError(w, http.StatusUnauthorized, "current password is incorrect")
+			return
+		}
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Password changed successfully"})
+}
+
+// SetPassword sets a password for OAuth users
+func (api *API) SetPassword(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	var request dto.SetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.SetPassword(r.Context(), userID, request.NewPassword); err != nil {
+		logError(api.logger, "set password", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Password set successfully"})
+}
+
+// RemovePassword removes password for OAuth users
+func (api *API) RemovePassword(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	if err := api.auth.RemovePassword(r.Context(), userID); err != nil {
+		logError(api.logger, "remove password", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Password removed successfully"})
+}
+
+// SendEmailVerification sends email verification
+func (api *API) SendEmailVerification(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	if err := api.auth.SendEmailVerification(r.Context(), userID); err != nil {
+		logError(api.logger, "send email verification", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, dto.EmailVerificationResponse{
+		Message: "Verification email sent successfully",
+		Sent:    true,
+	})
+}
+
+// VerifyEmail verifies email address
+func (api *API) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var request dto.VerifyEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.VerifyEmail(r.Context(), request.Token); err != nil {
+		logError(api.logger, "verify email", err)
+		if err == services.ErrInvalidToken {
+			respondError(w, http.StatusBadRequest, "invalid or expired verification token")
+			return
+		}
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Email verified successfully"})
+}
+
+// ForgotPassword initiates password reset
+func (api *API) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var request dto.ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.ForgotPassword(r.Context(), request.Email); err != nil {
+		logError(api.logger, "forgot password", err)
+	}
+
+	// Always return success to prevent email enumeration
+	respondJSON(w, http.StatusOK, map[string]string{"message": "If the email exists, a reset link has been sent"})
+}
+
+// ResetPassword resets password using token
+func (api *API) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var request dto.ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.ResetPassword(r.Context(), request.Token, request.NewPassword); err != nil {
+		logError(api.logger, "reset password", err)
+		if err == services.ErrInvalidToken {
+			respondError(w, http.StatusBadRequest, "invalid or expired reset token")
+			return
+		}
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Password reset successfully"})
+}
+
+// Enable2FA starts 2FA setup
+func (api *API) Enable2FA(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	secret, totpURL, backupCodes, err := api.auth.Enable2FA(r.Context(), userID)
+	if err != nil {
+		logError(api.logger, "enable 2FA", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	response := dto.TwoFactorSetupResponse{
+		QRCodeURL:   *totpURL,
+		Secret:      *secret,
+		BackupCodes: backupCodes,
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+// Verify2FA completes 2FA setup
+func (api *API) Verify2FA(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	var request dto.Verify2FARequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.Verify2FA(r.Context(), userID, request.Code); err != nil {
+		logError(api.logger, "verify 2FA", err)
+		if err == services.ErrInvalidTwoFactorCode {
+			respondError(w, http.StatusBadRequest, "invalid verification code")
+			return
+		}
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Two-factor authentication enabled successfully"})
+}
+
+// Disable2FA disables 2FA
+func (api *API) Disable2FA(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	var request dto.Disable2FARequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.auth.Disable2FA(r.Context(), userID, request.Password, request.Code); err != nil {
+		logError(api.logger, "disable 2FA", err)
+		if err == services.ErrInvalidCredentials {
+			respondError(w, http.StatusUnauthorized, "invalid password")
+			return
+		}
+		if err == services.ErrInvalidTwoFactorCode {
+			respondError(w, http.StatusBadRequest, "invalid verification code")
+			return
+		}
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Two-factor authentication disabled successfully"})
 }

@@ -55,6 +55,7 @@ func migrate(database *gorm.DB) error {
 		&models.User{},
 		&models.Drink{},
 		&models.HydrationLog{},
+		&models.WeatherData{},
 	)
 }
 

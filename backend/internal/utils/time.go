@@ -61,3 +61,15 @@ func ConvertWeightToKg(value float64, unit string) (float64, error) {
 		return 0, fmt.Errorf("unsupported weight unit: %s", unit)
 	}
 }
+
+// ConvertWeightFromKg converts weight from kilograms to the specified unit.
+func ConvertWeightFromKg(weightKg float64, unit string) (float64, error) {
+	switch unit {
+	case "kg", "kilogram", "kilograms":
+		return weightKg, nil
+	case "lb", "lbs", "pound", "pounds":
+		return weightKg / 0.453592, nil
+	default:
+		return 0, fmt.Errorf("unsupported weight unit: %s", unit)
+	}
+}
