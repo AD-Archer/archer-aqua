@@ -104,8 +104,19 @@ export function useWaterTracking() {
     saveUserStats(newStats);
   }, [stats, todayRecord]);
 
-  const addDrink = useCallback((type: DrinkType, amount: number, customDrinkId?: string) => {
-    if (!todayRecord) return;
+  const addDrink = useCallback((type: DrinkType, amount: number, customDrinkId?: string, date?: string) => {
+    const targetDate = date || getTodayKey();
+    let record = getDayRecord(targetDate);
+    
+    if (!record) {
+      // Create a new record for this date if it doesn't exist
+      record = {
+        date: targetDate,
+        drinks: [],
+        totalHydration: 0,
+        goal: getDailyGoal(),
+      };
+    }
 
     let multiplier = 1.0;
     
@@ -127,19 +138,23 @@ export function useWaterTracking() {
       hydrationValue,
     };
 
-    const updatedDrinks = [...todayRecord.drinks, newDrink];
+    const updatedDrinks = [...record.drinks, newDrink];
     const totalHydration = updatedDrinks.reduce((sum, d) => sum + d.hydrationValue, 0);
 
     const updatedRecord: DayRecord = {
-      ...todayRecord,
+      ...record,
       drinks: updatedDrinks,
       totalHydration,
     };
 
-    setTodayRecord(updatedRecord);
     saveDayRecord(updatedRecord);
-    updateStats(updatedRecord);
-  }, [todayRecord, updateStats]);
+    
+    // Update todayRecord if we're adding to today
+    if (targetDate === getTodayKey()) {
+      setTodayRecord(updatedRecord);
+      updateStats(updatedRecord);
+    }
+  }, [updateStats]);
 
   const updateGoal = useCallback((newGoal: number) => {
     setGoal(newGoal);

@@ -8,12 +8,14 @@ import { AchievementCard } from '@/components/AchievementCard';
 import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
 import { CalendarView } from '@/components/CalendarView';
-import { DrinkType, formatVolume, DRINK_COLORS, DRINK_ICONS } from '@/types/water';
+import { DrinkType, formatVolume, DRINK_COLORS } from '@/types/water';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAuthenticated, getUnitPreference, getCustomDrinkById } from '@/lib/storage';
+import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey } from '@/lib/storage';
+import { format } from 'date-fns';
+import { getDrinkIcon } from '@/lib/iconMap';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +33,8 @@ const Index = () => {
   const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink } = useWaterTracking();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayKey());
+  const [currentTab, setCurrentTab] = useState('today');
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -39,12 +43,14 @@ const Index = () => {
   }, [navigate]);
 
   const handleQuickAdd = (amount: number) => {
-    addDrink('water', amount);
-    toast.success(`Added ${formatVolume(amount, unitPreference)} of water! 💧`);
+    addDrink('water', amount, undefined, selectedDate);
+    const isToday = selectedDate === getTodayKey();
+    const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
+    toast.success(`Added ${formatVolume(amount, unitPreference)} of water to ${dateText}!`);
   };
 
   const handleAddDrink = (type: DrinkType, amount: number, customDrinkId?: string) => {
-    addDrink(type, amount, customDrinkId);
+    addDrink(type, amount, customDrinkId, selectedDate);
     const drinkNames: Record<DrinkType, string> = {
       water: 'water',
       coffee: 'coffee',
@@ -57,7 +63,14 @@ const Index = () => {
       sports_drink: 'sports drink',
       custom: 'custom drink',
     };
-    toast.success(`Added ${formatVolume(amount, unitPreference)} of ${drinkNames[type]}!`);
+    const isToday = selectedDate === getTodayKey();
+    const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
+    toast.success(`Added ${formatVolume(amount, unitPreference)} of ${drinkNames[type]} to ${dateText}!`);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    const dateString = format(date, 'yyyy-MM-dd');
+    setSelectedDate(dateString);
   };
 
   const handleRemoveDrink = (drinkId: string, date?: string) => {
@@ -95,7 +108,12 @@ const Index = () => {
           </Button>
         </header>
 
-        <Tabs defaultValue="today" className="w-full">
+        <Tabs defaultValue="today" className="w-full" value={currentTab} onValueChange={(value) => {
+          setCurrentTab(value);
+          if (value === 'today') {
+            setSelectedDate(getTodayKey());
+          }
+        }}>
           <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="today">
               <Droplet className="h-4 w-4 mr-2" />
@@ -147,7 +165,7 @@ const Index = () => {
                     const isCustom = drink.type === 'custom' && drink.customDrinkId;
                     const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
                     const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
-                    const drinkIcon = isCustom ? '🥤' : DRINK_ICONS[drink.type as Exclude<DrinkType, 'custom'>];
+                    const DrinkIcon = getDrinkIcon(drink.type);
                     const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
                     
                     return (
@@ -157,10 +175,10 @@ const Index = () => {
                       >
                         <div className="flex items-center gap-3 flex-1">
                           <div 
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
+                            className="w-10 h-10 rounded-full flex items-center justify-center"
                             style={{ backgroundColor: `${drinkColor}20`, color: drinkColor }}
                           >
-                            {drinkIcon}
+                            <DrinkIcon className="h-5 w-5" style={{ color: drinkColor }} />
                           </div>
                           <div>
                             <div className="font-medium capitalize">{drinkName}</div>
@@ -214,10 +232,7 @@ const Index = () => {
               unitPreference={unitPreference}
               onRemoveDrink={handleRemoveDrink}
               onAddDrink={() => setDialogOpen(true)}
-              onDateSelect={(date) => {
-                // Could refresh data or do other actions when date changes
-                console.log('Date selected:', date);
-              }}
+              onDateSelect={handleDateSelect}
             />
           </TabsContent>
 

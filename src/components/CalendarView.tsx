@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, Plus } from 'lucide-react';
+import { Trash2, Plus, CheckCircle2, Circle } from 'lucide-react';
 import { getDayRecord, getTodayKey, getCustomDrinkById } from '@/lib/storage';
-import { DrinkType, DRINK_COLORS, DRINK_ICONS, formatVolume, VolumeUnit, Drink } from '@/types/water';
+import { DrinkType, DRINK_COLORS, formatVolume, VolumeUnit, Drink } from '@/types/water';
 import { format } from 'date-fns';
+import { getDrinkIcon } from '@/lib/iconMap';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,7 +157,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
                 const isCustom = drink.type === 'custom' && drink.customDrinkId;
                 const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
                 const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
-                const drinkIcon = isCustom ? '🥤' : DRINK_ICONS[drink.type as Exclude<DrinkType, 'custom'>];
+                const DrinkIcon = getDrinkIcon(drink.type);
                 const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
                 
                 return (
@@ -166,10 +167,10 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
                   >
                     <div className="flex items-center gap-3 flex-1">
                       <div 
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
+                        className="w-10 h-10 rounded-full flex items-center justify-center"
                         style={{ backgroundColor: `${drinkColor}20`, color: drinkColor }}
                       >
-                        {drinkIcon}
+                        <DrinkIcon className="h-5 w-5" style={{ color: drinkColor }} />
                       </div>
                       <div>
                         <div className="font-medium capitalize">{drinkName}</div>
@@ -248,9 +249,19 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <p className={`text-2xl font-bold ${record.totalHydration >= record.goal ? 'text-green-500' : 'text-yellow-500'}`}>
-                  {record.totalHydration >= record.goal ? '✓ Met' : '○ In Progress'}
-                </p>
+                <div className={`flex items-center gap-2 text-xl font-bold ${record.totalHydration >= record.goal ? 'text-green-500' : 'text-yellow-500'}`}>
+                  {record.totalHydration >= record.goal ? (
+                    <>
+                      <CheckCircle2 className="h-6 w-6" />
+                      <span>Met</span>
+                    </>
+                  ) : (
+                    <>
+                      <Circle className="h-6 w-6" />
+                      <span>In Progress</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
