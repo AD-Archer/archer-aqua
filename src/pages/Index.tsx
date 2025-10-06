@@ -404,7 +404,7 @@ const Index = () => {
                     return (
                       <div
                         key={drink.id}
-                        className="flex items-center justify-between p-3 bg-card rounded-lg border"
+                        className="flex items-center justify-between p-3 bg-primary/15 rounded-lg border hover:border-primary transition-all"
                       >
                         <div className="flex items-center gap-3 flex-1">
                           <div 

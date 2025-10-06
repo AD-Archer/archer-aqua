@@ -1422,7 +1422,7 @@ export default function Settings() {
                 <div>
                   <CardTitle>Weather-Based Adjustments</CardTitle>
                   <CardDescription>
-                    {useWeatherAdjustment 
+                    {useWeatherAdjustment
                       ? 'Automatically adjust your hydration goals based on local weather conditions'
                       : 'Enable weather tracking to automatically adjust your hydration goals based on local weather conditions'
                     }
@@ -1434,32 +1434,22 @@ export default function Settings() {
                 />
               </div>
             </CardHeader>
-          </Card>
+            {useWeatherAdjustment && (
+              <CardContent className="space-y-6">
+                <LocationPicker onLocationUpdate={handleLocationUpdate} />
 
-          {/* Location Settings - Only show when weather is enabled */}
-          {useWeatherAdjustment && (
-            <LocationPicker onLocationUpdate={handleLocationUpdate} />
-          )}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Current Weather</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Real-time weather conditions affecting your hydration needs
+                  </p>
+                  <WeatherCard onWeatherUpdate={handleWeatherUpdate} />
+                </div>
 
-          {/* Current Weather - Only show when weather is enabled */}
-          {useWeatherAdjustment && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Current Weather</CardTitle>
-                <CardDescription>
-                  Real-time weather conditions affecting your hydration needs
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <WeatherCard onWeatherUpdate={handleWeatherUpdate} />
+                <WeeklyWeatherView />
               </CardContent>
-            </Card>
-          )}
-
-          {/* Weekly Weather View - Only show when weather is enabled */}
-          {useWeatherAdjustment && (
-            <WeeklyWeatherView />
-          )}
+            )}
+          </Card>
 
         
           {/* Account Actions */}
