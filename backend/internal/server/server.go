@@ -94,6 +94,7 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 			r.Get("/google/login", api.BeginGoogleOAuth)
 			r.Get("/google/callback", api.GoogleOAuthCallback)
 			r.With(authMiddleware).Get("/me", api.Me)
+			r.With(authMiddleware).Post("/accept-policies", api.AcceptPolicies)
 
 			// Password management
 			r.Post("/forgot-password", api.ForgotPassword)
@@ -106,6 +107,9 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 			r.Route("/{userID}", func(r chi.Router) {
 				r.Get("/", api.GetUser)
 				r.Patch("/", api.UpdateUser)
+				r.Delete("/", api.DeleteUserAccount)
+				r.Get("/export", api.ExportUserData)
+				r.Post("/import", api.ImportUserData)
 
 				r.Get("/drinks", api.ListDrinks)
 				r.Post("/drinks", api.CreateDrink)

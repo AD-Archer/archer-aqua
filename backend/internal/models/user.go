@@ -45,6 +45,8 @@ type User struct {
 	LastLoginAt               *time.Time
 	LoginAttempts             int `gorm:"default:0"`
 	LockedUntil               *time.Time
+	PoliciesAcceptedVersion   *string `gorm:"size:64"`
+	PoliciesAcceptedAt        *time.Time
 	Drinks                    []Drink        `gorm:"constraint:OnDelete:CASCADE"`
 	HydrationLogs             []HydrationLog `gorm:"constraint:OnDelete:CASCADE"`
 }

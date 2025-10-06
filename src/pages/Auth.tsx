@@ -196,6 +196,8 @@ export default function Auth() {
             email,
             password,
             displayName: name || email.split('@')[0],
+            acceptPolicies: false,
+            policiesVersion: ''
           });
           
           saveAuthToken(response.token);

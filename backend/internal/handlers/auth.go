@@ -19,11 +19,13 @@ func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, hasProfile, err := api.auth.Register(r.Context(), request.Email, request.Password, request.DisplayName)
+	user, token, hasProfile, err := api.auth.Register(r.Context(), request.Email, request.Password, request.DisplayName, request.AcceptPolicies, request.PoliciesVersion)
 	if err != nil {
 		switch {
 		case err == services.ErrUserAlreadyExists:
 			respondError(w, http.StatusConflict, err.Error())
+		case err == services.ErrPoliciesNotAccepted, err == services.ErrPolicyVersionMismatch:
+			respondError(w, http.StatusBadRequest, err.Error())
 		default:
 			logError(api.logger, "register user", err)
 			respondError(w, http.StatusBadRequest, err.Error())
@@ -31,10 +33,13 @@ func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
 	respondJSON(w, http.StatusCreated, dto.AuthResponse{
-		Token:      token,
-		User:       dto.NewUserResponse(*user),
-		HasProfile: hasProfile,
+		Token:                    token,
+		User:                     userResponse,
+		HasProfile:               hasProfile,
+		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
+		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
 	})
 }
 
@@ -65,10 +70,13 @@ func (api *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
 	respondJSON(w, http.StatusOK, dto.AuthResponse{
-		Token:      token,
-		User:       dto.NewUserResponse(*user),
-		HasProfile: hasProfile,
+		Token:                    token,
+		User:                     userResponse,
+		HasProfile:               hasProfile,
+		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
+		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
 	})
 }
 
@@ -91,9 +99,52 @@ func (api *API) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
 	respondJSON(w, http.StatusOK, dto.AuthStateResponse{
-		User:       dto.NewUserResponse(*user),
-		HasProfile: services.ProfileIsComplete(*user),
+		User:                     userResponse,
+		HasProfile:               services.ProfileIsComplete(*user),
+		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
+		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
+	})
+}
+
+func (api *API) AcceptPolicies(w http.ResponseWriter, r *http.Request) {
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid token subject")
+		return
+	}
+
+	var request dto.AcceptPoliciesRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	user, err := api.auth.AcceptPolicies(r.Context(), userID, request.Version)
+	if err != nil {
+		switch err {
+		case services.ErrPolicyVersionMismatch:
+			respondError(w, http.StatusBadRequest, err.Error())
+		default:
+			logError(api.logger, "accept policies", err)
+			respondError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
+	respondJSON(w, http.StatusOK, dto.AuthStateResponse{
+		User:                     userResponse,
+		HasProfile:               services.ProfileIsComplete(*user),
+		RequiresPolicyAcceptance: userResponse.RequiresPolicyAcceptance,
+		PoliciesVersion:          userResponse.PoliciesCurrentVersion,
 	})
 }
 
@@ -135,6 +186,11 @@ func (api *API) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	values.Set("email", user.Email)
 	if strings.TrimSpace(user.DisplayName) != "" {
 		values.Set("displayName", user.DisplayName)
+	}
+	requiresPolicies := api.auth.RequiresPolicyAcceptance(*user)
+	values.Set("requiresPolicies", fmt.Sprintf("%t", requiresPolicies))
+	if requiresPolicies {
+		values.Set("policiesVersion", api.auth.CurrentPoliciesVersion())
 	}
 
 	target, err := url.Parse(redirectTarget)

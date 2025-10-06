@@ -162,6 +162,139 @@ func (s *UserService) UpdateUser(ctx context.Context, userID uuid.UUID, input dt
 	return user, nil
 }
 
+func (s *UserService) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&models.User{}, "id = ?", userID).Error; err != nil {
+			return fmt.Errorf("delete user: %w", err)
+		}
+		return nil
+	})
+}
+
+func (s *UserService) ExportUserData(ctx context.Context, userID uuid.UUID, policiesVersion string) (*dto.UserDataExport, error) {
+	user, err := s.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var drinks []models.Drink
+	if err := s.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("created_at ASC").
+		Find(&drinks).Error; err != nil {
+		return nil, fmt.Errorf("export drinks: %w", err)
+	}
+
+	var logs []models.HydrationLog
+	if err := s.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("consumed_at ASC").
+		Find(&logs).Error; err != nil {
+		return nil, fmt.Errorf("export hydration logs: %w", err)
+	}
+
+	drinkResponses := make([]dto.DrinkResponse, 0, len(drinks))
+	for _, drink := range drinks {
+		drinkResponses = append(drinkResponses, dto.NewDrinkResponse(drink))
+	}
+
+	logResponses := make([]dto.HydrationLogResponse, 0, len(logs))
+	for _, logEntry := range logs {
+		logResponses = append(logResponses, dto.NewHydrationLogResponse(logEntry))
+	}
+
+	userResponse := dto.NewUserResponse(*user, policiesVersion)
+
+	return &dto.UserDataExport{
+		User:            userResponse,
+		Drinks:          drinkResponses,
+		HydrationLogs:   logResponses,
+		ExportedAt:      time.Now().UTC(),
+		PoliciesVersion: policiesVersion,
+	}, nil
+}
+
+func (s *UserService) ImportUserData(ctx context.Context, userID uuid.UUID, payload dto.UserDataImportRequest) error {
+	trim := func(value string) string { return strings.TrimSpace(value) }
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		replace := true
+		if payload.ReplaceExisting != nil {
+			replace = *payload.ReplaceExisting
+		}
+
+		if replace {
+			if err := tx.Where("user_id = ?", userID).Delete(&models.HydrationLog{}).Error; err != nil {
+				return fmt.Errorf("clear hydration logs: %w", err)
+			}
+			if err := tx.Where("user_id = ?", userID).Delete(&models.Drink{}).Error; err != nil {
+				return fmt.Errorf("clear drinks: %w", err)
+			}
+		}
+
+		for _, drink := range payload.Drinks {
+			name := trim(drink.Name)
+			if name == "" {
+				continue
+			}
+			drinkModel := models.Drink{
+				ID:                  drink.ID,
+				UserID:              &userID,
+				Name:                name,
+				Type:                defaultString(trim(drink.Type), "beverage"),
+				HydrationMultiplier: drink.HydrationMultiplier,
+				DefaultVolumeMl:     drink.DefaultVolumeMl,
+				ColorHex:            drink.ColorHex,
+				Source:              defaultString(trim(drink.Source), "custom"),
+			}
+			if drink.ArchivedAt != nil {
+				drinkModel.ArchivedAt = drink.ArchivedAt
+			}
+
+			if err := tx.Create(&drinkModel).Error; err != nil {
+				return fmt.Errorf("import drink %s: %w", drink.ID, err)
+			}
+		}
+
+		for _, logEntry := range payload.HydrationLogs {
+			label := trim(logEntry.Label)
+			if label == "" {
+				label = "Custom Drink"
+			}
+			hydrationMultiplier := logEntry.HydrationMultiplier
+			if hydrationMultiplier <= 0 {
+				hydrationMultiplier = 1.0
+			}
+
+			entry := models.HydrationLog{
+				ID:                  logEntry.ID,
+				UserID:              userID,
+				DrinkID:             logEntry.DrinkID,
+				Label:               label,
+				VolumeMl:            logEntry.VolumeMl,
+				HydrationMultiplier: hydrationMultiplier,
+				EffectiveMl:         logEntry.EffectiveMl,
+				ConsumedAt:          logEntry.ConsumedAt.UTC(),
+				ConsumedAtLocal:     logEntry.ConsumedAtLocal,
+				Timezone:            defaultString(trim(logEntry.Timezone), "UTC"),
+				DailyKey:            logEntry.DailyKey,
+				Source:              defaultString(trim(logEntry.Source), "manual"),
+				Notes:               logEntry.Notes,
+			}
+
+			if entry.EffectiveMl <= 0 {
+				entry.EffectiveMl = entry.VolumeMl * entry.HydrationMultiplier
+			}
+
+			if err := tx.Create(&entry).Error; err != nil {
+				return fmt.Errorf("import hydration log %s: %w", logEntry.ID, err)
+			}
+		}
+
+		return nil
+	})
+}
+
 func defaultString(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback

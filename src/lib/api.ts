@@ -98,6 +98,10 @@ export interface ApiUserResponse {
   lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  policiesAcceptedVersion?: string | null;
+  policiesAcceptedAt?: string | null;
+  policiesCurrentVersion?: string;
+  requiresPolicyAcceptance?: boolean;
 }
 
 export interface ApiDrinkResponse {
@@ -151,10 +155,26 @@ export interface ApiHydrationStatsResponse {
   totalEffectiveMl: number;
 }
 
+export interface ApiUserDataExport {
+  user: ApiUserResponse;
+  drinks: ApiDrinkResponse[];
+  hydrationLogs: ApiHydrationLogResponse[];
+  exportedAt: string;
+  policiesVersion: string;
+}
+
+export interface ImportUserDataPayload {
+  drinks: ApiDrinkResponse[];
+  hydrationLogs: ApiHydrationLogResponse[];
+  replaceExisting?: boolean;
+}
+
 export interface ApiAuthResponse {
   token: string;
   user: ApiUserResponse;
   hasProfile: boolean;
+  requiresPolicyAcceptance: boolean;
+  policiesVersion: string;
 }
 
 export interface ApiTwoFactorRequiredResponse {
@@ -165,12 +185,16 @@ export interface ApiTwoFactorRequiredResponse {
 export interface ApiAuthStateResponse {
   user: ApiUserResponse;
   hasProfile: boolean;
+  requiresPolicyAcceptance: boolean;
+  policiesVersion: string;
 }
 
 export interface RegisterPayload {
   email: string;
   password: string;
   displayName: string;
+  acceptPolicies: boolean;
+  policiesVersion: string;
 }
 
 export interface LoginPayload {

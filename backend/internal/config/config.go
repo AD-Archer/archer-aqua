@@ -35,6 +35,7 @@ type Config struct {
 	SMTPFromName              string
 	SMTPEnabled               bool
 	EmailVerificationRequired bool
+	PoliciesVersion           string
 }
 
 func Load() (Config, error) {
@@ -101,6 +102,7 @@ func Load() (Config, error) {
 	smtpFromName := valueOrDefault("SMTP_FROM_NAME", "Archer Aqua")
 	smtpEnabled := smtpHost != "" && smtpUsername != "" && smtpPassword != ""
 	emailVerificationRequired := valueOrDefault("EMAIL_VERIFICATION_REQUIRED", "false") == "true"
+	policiesVersion := valueOrDefault("POLICIES_VERSION", "2025-10-06")
 
 	return Config{
 		Port:                      port,
@@ -129,6 +131,7 @@ func Load() (Config, error) {
 		SMTPFromName:              smtpFromName,
 		SMTPEnabled:               smtpEnabled,
 		EmailVerificationRequired: emailVerificationRequired,
+		PoliciesVersion:           policiesVersion,
 	}, nil
 }
 

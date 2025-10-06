@@ -1,9 +1,11 @@
 package dto
 
 type RegisterRequest struct {
-	Email       string `json:"email"`
-	Password    string `json:"password"`
-	DisplayName string `json:"displayName"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	DisplayName     string `json:"displayName"`
+	AcceptPolicies  bool   `json:"acceptPolicies"`
+	PoliciesVersion string `json:"policiesVersion"`
 }
 
 type LoginRequest struct {
@@ -42,6 +44,10 @@ type Disable2FARequest struct {
 	Code     string `json:"code"`
 }
 
+type AcceptPoliciesRequest struct {
+	Version string `json:"version"`
+}
+
 type ForgotPasswordRequest struct {
 	Email string `json:"email"`
 }
@@ -52,14 +58,18 @@ type ResetPasswordRequest struct {
 }
 
 type AuthResponse struct {
-	Token      string       `json:"token"`
-	User       UserResponse `json:"user"`
-	HasProfile bool         `json:"hasProfile"`
+	Token                    string       `json:"token"`
+	User                     UserResponse `json:"user"`
+	HasProfile               bool         `json:"hasProfile"`
+	RequiresPolicyAcceptance bool         `json:"requiresPolicyAcceptance"`
+	PoliciesVersion          string       `json:"policiesVersion"`
 }
 
 type AuthStateResponse struct {
-	User       UserResponse `json:"user"`
-	HasProfile bool         `json:"hasProfile"`
+	User                     UserResponse `json:"user"`
+	HasProfile               bool         `json:"hasProfile"`
+	RequiresPolicyAcceptance bool         `json:"requiresPolicyAcceptance"`
+	PoliciesVersion          string       `json:"policiesVersion"`
 }
 
 type TwoFactorSetupResponse struct {

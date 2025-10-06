@@ -20,14 +20,16 @@ import (
 )
 
 var (
-	ErrUserAlreadyExists    = errors.New("user already exists")
-	ErrInvalidCredentials   = errors.New("invalid email or password")
-	ErrGoogleOAuthDisabled  = errors.New("google oauth is not configured")
-	ErrEmailNotVerified     = errors.New("email address is not verified")
-	ErrAccountLocked        = errors.New("account is temporarily locked due to too many failed attempts")
-	ErrInvalidToken         = errors.New("invalid or expired token")
-	ErrTwoFactorRequired    = errors.New("two-factor authentication required")
-	ErrInvalidTwoFactorCode = errors.New("invalid two-factor authentication code")
+	ErrUserAlreadyExists     = errors.New("user already exists")
+	ErrInvalidCredentials    = errors.New("invalid email or password")
+	ErrGoogleOAuthDisabled   = errors.New("google oauth is not configured")
+	ErrEmailNotVerified      = errors.New("email address is not verified")
+	ErrAccountLocked         = errors.New("account is temporarily locked due to too many failed attempts")
+	ErrInvalidToken          = errors.New("invalid or expired token")
+	ErrTwoFactorRequired     = errors.New("two-factor authentication required")
+	ErrInvalidTwoFactorCode  = errors.New("invalid two-factor authentication code")
+	ErrPoliciesNotAccepted   = errors.New("you must accept the latest privacy policy and terms of service")
+	ErrPolicyVersionMismatch = errors.New("policy version mismatch")
 )
 
 type AuthService struct {
@@ -72,7 +74,7 @@ func NewAuthService(db *gorm.DB, cfg config.Config) *AuthService {
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password, displayName string) (*models.User, string, bool, error) {
+func (s *AuthService) Register(ctx context.Context, email, password, displayName string, acceptedPolicies bool, acceptedVersion string) (*models.User, string, bool, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" {
 		return nil, "", false, fmt.Errorf("email is required")
@@ -88,6 +90,19 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 		if parts := strings.Split(email, "@"); len(parts) > 0 {
 			displayName = parts[0]
 		}
+	}
+
+	if !acceptedPolicies {
+		return nil, "", false, ErrPoliciesNotAccepted
+	}
+
+	acceptedVersion = strings.TrimSpace(acceptedVersion)
+	if acceptedVersion == "" {
+		return nil, "", false, ErrPolicyVersionMismatch
+	}
+
+	if acceptedVersion != strings.TrimSpace(s.cfg.PoliciesVersion) {
+		return nil, "", false, ErrPolicyVersionMismatch
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -126,6 +141,10 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 		if strings.TrimSpace(user.DisplayName) == "" {
 			user.DisplayName = displayName
 		}
+
+		now := time.Now().UTC()
+		user.PoliciesAcceptedVersion = &acceptedVersion
+		user.PoliciesAcceptedAt = &now
 
 		if err := tx.Save(&user).Error; err != nil {
 			return err
@@ -417,6 +436,48 @@ func profileIsComplete(user models.User) bool {
 
 func ProfileIsComplete(user models.User) bool {
 	return profileIsComplete(user)
+}
+
+func (s *AuthService) RequiresPolicyAcceptance(user models.User) bool {
+	version := strings.TrimSpace(s.cfg.PoliciesVersion)
+	if version == "" {
+		return false
+	}
+	if user.PoliciesAcceptedVersion == nil {
+		return true
+	}
+	return *user.PoliciesAcceptedVersion != version
+}
+
+func (s *AuthService) CurrentPoliciesVersion() string {
+	return s.cfg.PoliciesVersion
+}
+
+func (s *AuthService) AcceptPolicies(ctx context.Context, userID uuid.UUID, version string) (*models.User, error) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return nil, ErrPolicyVersionMismatch
+	}
+	if version != strings.TrimSpace(s.cfg.PoliciesVersion) {
+		return nil, ErrPolicyVersionMismatch
+	}
+
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	user.PoliciesAcceptedVersion = &version
+	user.PoliciesAcceptedAt = &now
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return nil, fmt.Errorf("update policy acceptance: %w", err)
+	}
+
+	return &user, nil
 }
 
 func (s *AuthService) DefaultRedirect() string {

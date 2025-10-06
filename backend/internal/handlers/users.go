@@ -52,8 +52,9 @@ func (api *API) CreateUser(w http.ResponseWriter, r *http.Request) {
 		drinkResponses = append(drinkResponses, dto.NewDrinkResponse(drink))
 	}
 
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
 	respondJSON(w, http.StatusCreated, dto.UserSummaryResponse{
-		User:   dto.NewUserResponse(*user),
+		User:   userResponse,
 		Drinks: drinkResponses,
 	})
 }
@@ -88,8 +89,9 @@ func (api *API) GetUser(w http.ResponseWriter, r *http.Request) {
 		drinkResponses = append(drinkResponses, dto.NewDrinkResponse(drink))
 	}
 
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion())
 	respondJSON(w, http.StatusOK, dto.UserSummaryResponse{
-		User:   dto.NewUserResponse(*user),
+		User:   userResponse,
 		Drinks: drinkResponses,
 	})
 }
@@ -118,7 +120,81 @@ func (api *API) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, dto.NewUserResponse(*user))
+	respondJSON(w, http.StatusOK, dto.NewUserResponse(*user, api.auth.CurrentPoliciesVersion()))
+}
+
+func (api *API) DeleteUserAccount(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	if err := api.users.DeleteUser(r.Context(), userID); err != nil {
+		logError(api.logger, "delete user", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Account deleted"})
+}
+
+func (api *API) ExportUserData(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	data, err := api.users.ExportUserData(r.Context(), userID, api.auth.CurrentPoliciesVersion())
+	if err != nil {
+		logError(api.logger, "export user data", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, data)
+}
+
+func (api *API) ImportUserData(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	var request dto.UserDataImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	if err := api.users.ImportUserData(r.Context(), userID, request); err != nil {
+		logError(api.logger, "import user data", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	data, err := api.users.ExportUserData(r.Context(), userID, api.auth.CurrentPoliciesVersion())
+	if err != nil {
+		logError(api.logger, "refresh export after import", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, data)
 }
 
 func parseUUIDParam(r *http.Request, key string) (uuid.UUID, error) {

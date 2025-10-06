@@ -19,6 +19,8 @@ const STORAGE_KEYS = {
   PROGRESS_WHEEL_STYLE: 'archer_aqua_progress_wheel_style',
   BACKEND_USER_ID: 'archer_aqua_backend_user_id',
   BACKEND_DRINK_MAP: 'archer_aqua_backend_drink_map',
+  POLICIES_ACCEPTED_VERSION: 'archer_aqua_policies_version',
+  POLICIES_ACCEPTED_AT: 'archer_aqua_policies_accepted_at',
 };
 
 export const DEFAULT_GOAL = 2500; // 2.5L in ml
@@ -171,6 +173,7 @@ export function clearAuthToken(): void {
   localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
   localStorage.removeItem(STORAGE_KEYS.BACKEND_USER_ID);
   localStorage.removeItem(STORAGE_KEYS.BACKEND_DRINK_MAP);
+  clearPoliciesAcceptance();
 }
 
 export function getBackendUserId(): string | null {
@@ -194,6 +197,25 @@ export function saveBackendDrinkMap(map: Record<string, string>): void {
   localStorage.setItem(STORAGE_KEYS.BACKEND_DRINK_MAP, JSON.stringify(map));
 }
 
+export function savePoliciesAcceptance(version: string): void {
+  localStorage.setItem(STORAGE_KEYS.POLICIES_ACCEPTED_VERSION, version);
+  localStorage.setItem(STORAGE_KEYS.POLICIES_ACCEPTED_AT, new Date().toISOString());
+}
+
+export function getPoliciesAcceptedVersion(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.POLICIES_ACCEPTED_VERSION);
+}
+
+export function getPoliciesAcceptedAt(): Date | null {
+  const raw = localStorage.getItem(STORAGE_KEYS.POLICIES_ACCEPTED_AT);
+  return raw ? new Date(raw) : null;
+}
+
+export function clearPoliciesAcceptance(): void {
+  localStorage.removeItem(STORAGE_KEYS.POLICIES_ACCEPTED_VERSION);
+  localStorage.removeItem(STORAGE_KEYS.POLICIES_ACCEPTED_AT);
+}
+
 export function isAuthenticated(): boolean {
   return Boolean(getAuthToken()) || localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED) === 'true';
 }
@@ -205,6 +227,7 @@ export function logout(): void {
   localStorage.removeItem(STORAGE_KEYS.GOAL);
   localStorage.removeItem(STORAGE_KEYS.DAYS);
   localStorage.removeItem(STORAGE_KEYS.STATS);
+  clearPoliciesAcceptance();
 }
 
 export function getTodayKey(): string {

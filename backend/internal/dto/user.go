@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"strings"
 	"time"
 
 	"github.com/AD-Archer/archer-aqua/backend/internal/models"
@@ -76,6 +77,10 @@ type UserResponse struct {
 	LastLoginAt               *time.Time      `json:"lastLoginAt"`
 	CreatedAt                 time.Time       `json:"createdAt"`
 	UpdatedAt                 time.Time       `json:"updatedAt"`
+	PoliciesAcceptedVersion   *string         `json:"policiesAcceptedVersion"`
+	PoliciesAcceptedAt        *time.Time      `json:"policiesAcceptedAt"`
+	PoliciesCurrentVersion    string          `json:"policiesCurrentVersion"`
+	RequiresPolicyAcceptance  bool            `json:"requiresPolicyAcceptance"`
 }
 
 type UserSummaryResponse struct {
@@ -83,7 +88,7 @@ type UserSummaryResponse struct {
 	Drinks []DrinkResponse `json:"drinks"`
 }
 
-func NewUserResponse(user models.User) UserResponse {
+func NewUserResponse(user models.User, currentPoliciesVersion string) UserResponse {
 	// Convert weight back to user's preferred unit, fallback to kg if conversion fails
 	weightInPreferredUnit := user.WeightKg
 	if user.WeightUnit != "" {
@@ -122,5 +127,9 @@ func NewUserResponse(user models.User) UserResponse {
 		LastLoginAt:               user.LastLoginAt,
 		CreatedAt:                 user.CreatedAt,
 		UpdatedAt:                 user.UpdatedAt,
+		PoliciesAcceptedVersion:   user.PoliciesAcceptedVersion,
+		PoliciesAcceptedAt:        user.PoliciesAcceptedAt,
+		PoliciesCurrentVersion:    currentPoliciesVersion,
+		RequiresPolicyAcceptance:  strings.TrimSpace(currentPoliciesVersion) != "" && (user.PoliciesAcceptedVersion == nil || *user.PoliciesAcceptedVersion != currentPoliciesVersion),
 	}
 }

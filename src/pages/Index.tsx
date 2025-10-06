@@ -8,7 +8,6 @@ import { AchievementCard } from '@/components/AchievementCard';
 import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
 import { CalendarView } from '@/components/CalendarView';
-import { WeatherCard } from '@/components/WeatherCard';
 import { DrinkType, DayRecord, formatVolume, DRINK_COLORS } from '@/types/water';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
