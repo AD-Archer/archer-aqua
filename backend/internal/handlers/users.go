@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/AD-Archer/archer-aqua/backend/internal/dto"
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,22 @@ func (api *API) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid payload")
 		return
+	}
+
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	request.Email = claims.Email
+	if strings.TrimSpace(request.DisplayName) == "" {
+		parts := strings.Split(claims.Email, "@")
+		if len(parts) > 0 {
+			request.DisplayName = parts[0]
+		} else {
+			request.DisplayName = claims.Email
+		}
 	}
 
 	user, err := api.users.CreateUser(r.Context(), request)
@@ -48,6 +65,10 @@ func (api *API) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
 	user, err := api.users.GetUser(r.Context(), userID)
 	if err != nil {
 		logError(api.logger, "get user", err)
@@ -77,6 +98,10 @@ func (api *API) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUUIDParam(r, "userID")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
 		return
 	}
 

@@ -9,18 +9,24 @@ import {
   getDailyGoal,
   saveDailyGoal,
   getCustomDrinkById,
+  getTimezone,
 } from '@/lib/storage';
+import {
+  backendIsEnabled,
+  fetchDayRecordFromBackend,
+  fetchHydrationStatsFromBackend,
+  logHydrationToBackend,
+  mapBackendStatsToUserStats,
+  syncGoalToBackend,
+} from '@/lib/backend';
+import { resolveDrinkLabel } from '@/lib/api';
 
 export function useWaterTracking() {
   const [todayRecord, setTodayRecord] = useState<DayRecord | null>(null);
   const [stats, setStats] = useState<UserStats>(getUserStats());
   const [goal, setGoal] = useState(getDailyGoal());
 
-  useEffect(() => {
-    loadTodayRecord();
-  }, []);
-
-  const loadTodayRecord = () => {
+  const loadLocalTodayRecord = useCallback(() => {
     const today = getTodayKey();
     let record = getDayRecord(today);
     
@@ -35,76 +41,148 @@ export function useWaterTracking() {
     }
     
     setTodayRecord(record);
-  };
+    setGoal(record.goal);
+  }, []);
 
-  const updateStats = useCallback((record: DayRecord) => {
-    const newStats = { ...stats };
-    
-    // Update total water consumed
-    newStats.totalWaterConsumed += record.totalHydration - (todayRecord?.totalHydration || 0);
-    
-    // Check if goal was met
-    const goalMet = record.totalHydration >= record.goal;
-    
-    // Update streak
-    if (goalMet && todayRecord && todayRecord.totalHydration < todayRecord.goal) {
-      newStats.currentStreak += 1;
-      newStats.longestStreak = Math.max(newStats.longestStreak, newStats.currentStreak);
-      newStats.totalDaysTracked += 1;
+  const refreshBackendData = useCallback(async () => {
+    if (!backendIsEnabled()) {
+      return;
     }
 
-    // Update achievements
-    newStats.achievements = newStats.achievements.map(achievement => {
-      if (achievement.unlocked) return achievement;
+    const timezone = getTimezone();
+    const today = getTodayKey();
 
-      let currentProgress = achievement.currentProgress;
+    try {
+      const [record, statsResponse] = await Promise.all([
+        fetchDayRecordFromBackend(today, timezone),
+        fetchHydrationStatsFromBackend(timezone, 7),
+      ]);
 
-      switch (achievement.id) {
-        case 'first_day':
-          if (goalMet) {
-            return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress: 1 };
-          }
-          break;
-        case 'week_streak':
-          currentProgress = newStats.currentStreak;
-          if (currentProgress >= 7) {
-            return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
-          }
-          break;
-        case 'month_streak':
-          currentProgress = newStats.currentStreak;
-          if (currentProgress >= 30) {
-            return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
-          }
-          break;
-        case 'total_10l':
-          currentProgress = newStats.totalWaterConsumed;
-          if (currentProgress >= 10000) {
-            return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
-          }
-          break;
-        case 'total_100l':
-          currentProgress = newStats.totalWaterConsumed;
-          if (currentProgress >= 100000) {
-            return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
-          }
-          break;
-        case 'perfect_week':
-          currentProgress = newStats.currentStreak;
-          if (currentProgress >= 7) {
-            return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
-          }
-          break;
+      if (record) {
+        setTodayRecord(record);
+        saveDayRecord(record);
+        if (record.goal) {
+          setGoal(record.goal);
+          saveDailyGoal(record.goal);
+        }
+      } else {
+        loadLocalTodayRecord();
       }
 
-      return { ...achievement, currentProgress };
+      if (statsResponse) {
+        const mapped = mapBackendStatsToUserStats(statsResponse);
+        setStats(mapped);
+        saveUserStats(mapped);
+      }
+    } catch (error) {
+      console.warn('Failed to load backend hydration data', error);
+      loadLocalTodayRecord();
+    }
+  }, [loadLocalTodayRecord]);
+
+  useEffect(() => {
+    if (backendIsEnabled()) {
+      refreshBackendData();
+    } else {
+      loadLocalTodayRecord();
+    }
+  }, [loadLocalTodayRecord, refreshBackendData]);
+
+  const updateStats = useCallback((record: DayRecord, previousRecord?: DayRecord | null) => {
+    setStats((prevStats) => {
+      const baseline = previousRecord?.totalHydration ?? 0;
+      const priorGoalMet = previousRecord ? previousRecord.totalHydration >= previousRecord.goal : false;
+      const goalMet = record.totalHydration >= record.goal;
+
+      const newStats: UserStats = {
+        ...prevStats,
+        totalWaterConsumed: prevStats.totalWaterConsumed + record.totalHydration - baseline,
+      };
+
+      if (goalMet && !priorGoalMet) {
+        newStats.currentStreak += 1;
+        newStats.longestStreak = Math.max(newStats.longestStreak, newStats.currentStreak);
+        newStats.totalDaysTracked += 1;
+      }
+
+      newStats.achievements = newStats.achievements.map((achievement) => {
+        if (achievement.unlocked) {
+          return achievement;
+        }
+
+        let currentProgress = achievement.currentProgress;
+
+        switch (achievement.id) {
+          case 'first_day':
+            if (goalMet) {
+              return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress: 1 };
+            }
+            break;
+          case 'week_streak':
+            currentProgress = newStats.currentStreak;
+            if (currentProgress >= 7) {
+              return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
+            }
+            break;
+          case 'month_streak':
+            currentProgress = newStats.currentStreak;
+            if (currentProgress >= 30) {
+              return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
+            }
+            break;
+          case 'total_10l':
+            currentProgress = newStats.totalWaterConsumed;
+            if (currentProgress >= 10000) {
+              return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
+            }
+            break;
+          case 'total_100l':
+            currentProgress = newStats.totalWaterConsumed;
+            if (currentProgress >= 100000) {
+              return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
+            }
+            break;
+          case 'perfect_week':
+            currentProgress = newStats.currentStreak;
+            if (currentProgress >= 7) {
+              return { ...achievement, unlocked: true, unlockedDate: new Date(), currentProgress };
+            }
+            break;
+        }
+
+        return { ...achievement, currentProgress };
+      });
+
+      saveUserStats(newStats);
+      return newStats;
     });
+  }, []);
 
-    setStats(newStats);
-    saveUserStats(newStats);
-  }, [stats, todayRecord]);
+  const addDrink = useCallback(async (type: DrinkType, amount: number, customDrinkId?: string, date?: string) => {
+    if (backendIsEnabled()) {
+      const timezone = getTimezone();
+      let consumedAt: string | undefined;
+      if (date) {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        consumedAt = new Date(`${date}T${hours}:${minutes}:${seconds}`).toISOString();
+      }
 
-  const addDrink = useCallback((type: DrinkType, amount: number, customDrinkId?: string, date?: string) => {
+      const response = await logHydrationToBackend(type, amount, customDrinkId, {
+        consumedAt,
+        timezone,
+      });
+
+      if (!response) {
+        throw new Error('Unable to log hydration with the backend.');
+      }
+
+      await refreshBackendData();
+      return;
+    }
+
     const targetDate = date || getTodayKey();
     let record = getDayRecord(targetDate);
     
@@ -119,10 +197,12 @@ export function useWaterTracking() {
     }
 
     let multiplier = 1.0;
-    
+    let label = resolveDrinkLabel(type);
+
     if (type === 'custom' && customDrinkId) {
       const customDrink = getCustomDrinkById(customDrinkId);
       multiplier = customDrink?.hydrationMultiplier || 1.0;
+      label = customDrink?.name || label;
     } else if (type !== 'custom') {
       multiplier = DRINK_HYDRATION_MULTIPLIERS[type];
     }
@@ -136,6 +216,8 @@ export function useWaterTracking() {
       amount,
       timestamp: new Date(),
       hydrationValue,
+      label,
+      source: 'local',
     };
 
     const updatedDrinks = [...record.drinks, newDrink];
@@ -151,23 +233,39 @@ export function useWaterTracking() {
     
     // Update todayRecord if we're adding to today
     if (targetDate === getTodayKey()) {
+      const previousRecord = todayRecord;
       setTodayRecord(updatedRecord);
-      updateStats(updatedRecord);
+      updateStats(updatedRecord, previousRecord);
     }
-  }, [updateStats]);
+  }, [refreshBackendData, todayRecord, updateStats]);
 
-  const updateGoal = useCallback((newGoal: number) => {
+  const updateGoal = useCallback(async (newGoal: number) => {
     setGoal(newGoal);
     saveDailyGoal(newGoal);
-    
+
     if (todayRecord) {
       const updatedRecord = { ...todayRecord, goal: newGoal };
       setTodayRecord(updatedRecord);
       saveDayRecord(updatedRecord);
     }
-  }, [todayRecord]);
+
+    if (backendIsEnabled()) {
+      try {
+        await syncGoalToBackend(newGoal);
+        await refreshBackendData();
+      } catch (error) {
+        console.warn('Failed to sync goal with backend', error);
+      }
+    }
+  }, [todayRecord, refreshBackendData]);
 
   const removeDrink = useCallback((drinkId: string, date?: string) => {
+    if (backendIsEnabled()) {
+      console.warn('Removing drinks is not yet supported by the backend API.');
+      void refreshBackendData();
+      return;
+    }
+
     const targetDate = date || getTodayKey();
     const record = date ? getDayRecord(date) : todayRecord;
     
@@ -187,7 +285,7 @@ export function useWaterTracking() {
     if (targetDate === getTodayKey()) {
       setTodayRecord(updatedRecord);
     }
-  }, [todayRecord]);
+  }, [refreshBackendData, todayRecord]);
 
   return {
     todayRecord,

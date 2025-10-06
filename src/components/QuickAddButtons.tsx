@@ -5,16 +5,16 @@ import { VolumeUnit, formatVolume, DrinkType } from '@/types/water';
 import { AddDrinkDialog } from './AddDrinkDialog';
 
 interface QuickAddButtonsProps {
-  onQuickAdd: (amount: number) => void;
-  onAddDrink: (type: DrinkType, amount: number, customDrinkId?: string) => void;
+  onQuickAdd: (amount: number) => void | Promise<void>;
+  onAddDrink: (type: DrinkType, amount: number, customDrinkId?: string) => void | Promise<void>;
   unit?: VolumeUnit;
 }
 
 export function QuickAddButtons({ onQuickAdd, onAddDrink, unit = 'ml' }: QuickAddButtonsProps) {
   const [drinkDialogOpen, setDrinkDialogOpen] = useState(false);
 
-  const handleAddDrink = (type: DrinkType, amount: number, customDrinkId?: string) => {
-    onAddDrink(type, amount, customDrinkId);
+  const handleAddDrink = async (type: DrinkType, amount: number, customDrinkId?: string) => {
+    await onAddDrink(type, amount, customDrinkId);
     setDrinkDialogOpen(false);
   };
 
@@ -22,7 +22,7 @@ export function QuickAddButtons({ onQuickAdd, onAddDrink, unit = 'ml' }: QuickAd
     <>
       <div className="grid grid-cols-4 gap-3">
         <Button
-          onClick={() => onQuickAdd(250)}
+          onClick={() => void onQuickAdd(250)}
           variant="outline"
           className="flex flex-col h-24 hover:bg-primary/10 hover:border-primary transition-all group"
         >
@@ -32,7 +32,7 @@ export function QuickAddButtons({ onQuickAdd, onAddDrink, unit = 'ml' }: QuickAd
         </Button>
         
         <Button
-          onClick={() => onQuickAdd(330)}
+          onClick={() => void onQuickAdd(330)}
           variant="outline"
           className="flex flex-col h-24 hover:bg-primary/10 hover:border-primary transition-all group"
         >
@@ -42,7 +42,7 @@ export function QuickAddButtons({ onQuickAdd, onAddDrink, unit = 'ml' }: QuickAd
         </Button>
         
         <Button
-          onClick={() => onQuickAdd(500)}
+          onClick={() => void onQuickAdd(500)}
           variant="outline"
           className="flex flex-col h-24 hover:bg-primary/10 hover:border-primary transition-all group"
         >

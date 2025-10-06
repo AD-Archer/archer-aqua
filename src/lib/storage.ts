@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   USER: 'archer_aqua_user',
   PROFILE: 'archer_aqua_profile',
   IS_AUTHENTICATED: 'archer_aqua_auth',
+  AUTH_TOKEN: 'archer_aqua_auth_token',
   CUSTOM_DRINKS: 'archer_aqua_custom_drinks',
   UNIT_PREFERENCE: 'archer_aqua_unit_preference',
   WEIGHT_UNIT_PREFERENCE: 'archer_aqua_weight_unit_preference',
@@ -155,6 +156,22 @@ export function getUser(): { email: string; name: string } | null {
   return data ? JSON.parse(data) : null;
 }
 
+export function saveAuthToken(token: string): void {
+  localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+  localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
+}
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+  localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
+  localStorage.removeItem(STORAGE_KEYS.BACKEND_USER_ID);
+  localStorage.removeItem(STORAGE_KEYS.BACKEND_DRINK_MAP);
+}
+
 export function getBackendUserId(): string | null {
   return localStorage.getItem(STORAGE_KEYS.BACKEND_USER_ID);
 }
@@ -177,11 +194,16 @@ export function saveBackendDrinkMap(map: Record<string, string>): void {
 }
 
 export function isAuthenticated(): boolean {
-  return localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED) === 'true';
+  return Boolean(getAuthToken()) || localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED) === 'true';
 }
 
 export function logout(): void {
-  localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
+  clearAuthToken();
+  localStorage.removeItem(STORAGE_KEYS.USER);
+  localStorage.removeItem(STORAGE_KEYS.PROFILE);
+  localStorage.removeItem(STORAGE_KEYS.GOAL);
+  localStorage.removeItem(STORAGE_KEYS.DAYS);
+  localStorage.removeItem(STORAGE_KEYS.STATS);
 }
 
 export function getTodayKey(): string {

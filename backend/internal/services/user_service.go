@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -34,7 +35,8 @@ func (s *UserService) GetUser(ctx context.Context, userID uuid.UUID) (*models.Us
 }
 
 func (s *UserService) CreateUser(ctx context.Context, input dto.CreateUserRequest) (*models.User, error) {
-	if strings.TrimSpace(input.Email) == "" {
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	if email == "" {
 		return nil, fmt.Errorf("email is required")
 	}
 
@@ -54,30 +56,36 @@ func (s *UserService) CreateUser(ctx context.Context, input dto.CreateUserReques
 		dailyGoal = *input.CustomGoalLiters
 	}
 
-	user := models.User{
-		Email:                     strings.ToLower(input.Email),
-		DisplayName:               input.DisplayName,
-		WeightKg:                  weightKg,
-		Age:                       input.Age,
-		Gender:                    input.Gender,
-		ActivityLevel:             input.ActivityLevel,
-		Timezone:                  loc.String(),
-		TimezoneLastConfirmedAt:   &now,
-		LocationCity:              input.Location.City,
-		LocationRegion:            input.Location.Region,
-		LocationCountry:           input.Location.Country,
-		LocationLatitude:          input.Location.Latitude,
-		LocationLongitude:         input.Location.Longitude,
-		DailyGoalLiters:           dailyGoal,
-		CustomGoalLiters:          input.CustomGoalLiters,
-		VolumeUnit:                defaultString(input.VolumeUnit, "ml"),
-		TemperatureUnit:           defaultString(input.TemperatureUnit, "c"),
-		ProgressWheelStyle:        defaultString(input.ProgressWheelStyle, "drink_colors"),
-		WeatherAdjustmentsEnabled: input.WeatherAdjustmentsEnabled,
+	var user models.User
+	result := s.db.WithContext(ctx).Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("fetch user: %w", result.Error)
+		}
+		user = models.User{Email: email}
 	}
 
-	if err := s.db.WithContext(ctx).Create(&user).Error; err != nil {
-		return nil, fmt.Errorf("create user: %w", err)
+	user.DisplayName = defaultString(input.DisplayName, user.DisplayName)
+	user.WeightKg = weightKg
+	user.Age = input.Age
+	user.Gender = input.Gender
+	user.ActivityLevel = input.ActivityLevel
+	user.Timezone = loc.String()
+	user.TimezoneLastConfirmedAt = &now
+	user.LocationCity = input.Location.City
+	user.LocationRegion = input.Location.Region
+	user.LocationCountry = input.Location.Country
+	user.LocationLatitude = input.Location.Latitude
+	user.LocationLongitude = input.Location.Longitude
+	user.DailyGoalLiters = dailyGoal
+	user.CustomGoalLiters = input.CustomGoalLiters
+	user.VolumeUnit = defaultString(input.VolumeUnit, "ml")
+	user.TemperatureUnit = defaultString(input.TemperatureUnit, "c")
+	user.ProgressWheelStyle = defaultString(input.ProgressWheelStyle, defaultString(user.ProgressWheelStyle, "drink_colors"))
+	user.WeatherAdjustmentsEnabled = input.WeatherAdjustmentsEnabled
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return nil, fmt.Errorf("save user: %w", err)
 	}
 
 	return &user, nil

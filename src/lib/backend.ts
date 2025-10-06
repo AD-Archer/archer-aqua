@@ -1,11 +1,12 @@
 import {
   apiConfig,
-  createUser,
   getHydrationStats,
   getDailySummary,
+  getAuthState,
   logHydration,
   updateUser,
   type ApiDailySummaryResponse,
+  type ApiHydrationLogResponse,
   type ApiHydrationStatsResponse,
   type LogHydrationPayload,
   resolveDrinkLabel,
@@ -21,16 +22,12 @@ import {
   getCustomDrinkById,
   getProgressWheelStyle,
   getUnitPreference,
+  getBackendDrinkMap,
+  saveBackendDrinkMap,
 } from './storage';
 import { getLocationPreference } from './weather';
-import { DRINK_HYDRATION_MULTIPLIERS, DrinkType, UserStats } from '@/types/water';
+import { DRINK_HYDRATION_MULTIPLIERS, Drink, DrinkType, DayRecord, UserStats } from '@/types/water';
 
-const DEFAULT_BASELINE_WEIGHT_KG = 70;
-const DEFAULT_AGE = 30;
-const DEFAULT_GENDER = 'other';
-const DEFAULT_ACTIVITY = 'moderate';
-const DEFAULT_VOLUME_UNIT = 'ml';
-const DEFAULT_TEMPERATURE_UNIT = 'fahrenheit';
 const DEFAULT_PROGRESS_STYLE = 'drink_colors';
 
 function normalizeProgressStyle(style: string): string {
@@ -51,70 +48,45 @@ export async function ensureBackendUser(): Promise<string | null> {
     return existing;
   }
 
-  const authUser = getUser();
-  if (!authUser) {
-    return null;
+  try {
+    const authState = await getAuthState();
+    if (authState?.user?.id) {
+      saveBackendUserId(authState.user.id);
+      return authState.user.id;
+    }
+  } catch (error) {
+    console.warn('Failed to resolve backend auth state', error);
   }
 
-  const timezone = getTimezone();
-  const profile = getUserProfile();
-  const weightKg = profile?.weight ?? DEFAULT_BASELINE_WEIGHT_KG;
-  const age = profile?.age ?? DEFAULT_AGE;
-  const gender = profile?.gender ?? DEFAULT_GENDER;
-  const activityLevel = profile?.activityLevel ?? DEFAULT_ACTIVITY;
-  const customGoalMl = getDailyGoal();
-
-  const payload = {
-    email: authUser.email,
-    displayName: authUser.name || authUser.email.split('@')[0],
-    weight: {
-      value: weightKg,
-      unit: 'kg' as const,
-    },
-    age,
-    gender,
-    activityLevel,
-    timezone,
-    location: {
-      city: '',
-      region: '',
-      country: '',
-    },
-    volumeUnit: DEFAULT_VOLUME_UNIT,
-    temperatureUnit: DEFAULT_TEMPERATURE_UNIT,
-    progressWheelStyle: DEFAULT_PROGRESS_STYLE,
-    weatherAdjustmentsEnabled: getUseWeatherAdjustment(),
-    customGoalLiters: customGoalMl ? customGoalMl / 1000 : null,
-  };
-
-  const response = await createUser(payload);
-  saveBackendUserId(response.user.id);
-  return response.user.id;
+  return null;
 }
 
 export async function syncProfileToBackend(): Promise<void> {
   if (!backendIsEnabled()) {
     return;
   }
-  const userId = getBackendUserId();
+  let userId = getBackendUserId();
   if (!userId) {
-    await ensureBackendUser();
-    return;
+    userId = await ensureBackendUser();
+    if (!userId) {
+      return;
+    }
   }
 
-  const authUser = getUser();
   const profile = getUserProfile();
-  if (!profile || !authUser) {
+  if (!profile) {
     return;
   }
+  const authUser = getUser();
 
   const locationPreference = getLocationPreference();
   const preferredUnit = profile.preferredUnit ?? getUnitPreference() ?? 'ml';
   const temperaturePreference = profile.preferredTemperatureUnit ?? 'F';
   const goalMl = getDailyGoal();
+  const displayName = profile.name || authUser?.name || authUser?.email?.split('@')[0] || '';
 
   const payload = {
-    displayName: authUser.name,
+    displayName,
     weight: {
       value: profile.weight,
       unit: 'kg' as const,
@@ -158,14 +130,15 @@ export async function logHydrationToBackend(
   type: DrinkType,
   amountMl: number,
   customDrinkId?: string,
-): Promise<void> {
+  options?: { consumedAt?: string; timezone?: string },
+): Promise<ApiHydrationLogResponse | null> {
   if (!backendIsEnabled()) {
-    return;
+    return null;
   }
 
   const userId = await ensureBackendUser();
   if (!userId) {
-    return;
+    return null;
   }
 
   let hydrationMultiplier: number | undefined;
@@ -190,7 +163,20 @@ export async function logHydrationToBackend(
     source: 'frontend',
   };
 
-  await logHydration(userId, payload);
+  if (options?.consumedAt) {
+    payload.consumedAt = options.consumedAt;
+  }
+  if (options?.timezone) {
+    payload.timezone = options.timezone;
+  }
+
+  const response = await logHydration(userId, payload);
+
+  if (response.drinkId && response.label) {
+    rememberBackendDrink(response.drinkId, response.label);
+  }
+
+  return response;
 }
 
 export async function fetchDailySummaryFromBackend(date: string, timezone: string): Promise<ApiDailySummaryResponse | null> {
@@ -226,6 +212,88 @@ export function mapBackendStatsToUserStats(stats: ApiHydrationStatsResponse): Us
     totalDaysTracked: achievedDays.length,
     totalWaterConsumed: stats.totalEffectiveMl,
     achievements: [],
+  };
+}
+
+export async function fetchDayRecordFromBackend(date: string, timezone: string): Promise<DayRecord | null> {
+  const summary = await fetchDailySummaryFromBackend(date, timezone);
+  if (!summary) {
+    return null;
+  }
+  return mapDailySummaryToDayRecord(summary);
+}
+
+const LABEL_TO_DRINK_TYPE: Record<string, DrinkType> = {
+  water: 'water',
+  'sparkling water': 'water',
+  'sports drink': 'sports_drink',
+  'sports_drink': 'sports_drink',
+  gatorade: 'sports_drink',
+  powerade: 'sports_drink',
+  milk: 'milk',
+  latte: 'milk',
+  tea: 'tea',
+  coffee: 'coffee',
+  espresso: 'coffee',
+  cappuccino: 'coffee',
+  juice: 'juice',
+  orange: 'juice',
+  'orange juice': 'juice',
+  apple: 'juice',
+  'apple juice': 'juice',
+  soda: 'soda',
+  cola: 'soda',
+  'energy drink': 'energy_drink',
+  monster: 'energy_drink',
+  'red bull': 'energy_drink',
+  alcohol: 'alcohol',
+  beer: 'alcohol',
+  wine: 'alcohol',
+};
+
+function guessDrinkType(label?: string): DrinkType {
+  if (!label) {
+    return 'water';
+  }
+  const normalized = label.trim().toLowerCase();
+  return LABEL_TO_DRINK_TYPE[normalized] ?? 'custom';
+}
+
+function rememberBackendDrink(drinkId: string, label: string) {
+  const map = getBackendDrinkMap();
+  if (map[drinkId] === label) {
+    return;
+  }
+  map[drinkId] = label;
+  saveBackendDrinkMap(map);
+}
+
+export function mapApiLogToDrink(log: ApiHydrationLogResponse): Drink {
+  if (log.drinkId && log.label) {
+    rememberBackendDrink(log.drinkId, log.label);
+  }
+
+  const type = guessDrinkType(log.label);
+
+  return {
+    id: log.id,
+    backendLogId: log.id,
+    type,
+    customDrinkId: type === 'custom' ? log.drinkId ?? undefined : undefined,
+    amount: log.volumeMl,
+    timestamp: new Date(log.consumedAt),
+    hydrationValue: log.effectiveMl,
+    label: log.label,
+    source: 'backend',
+  };
+}
+
+export function mapDailySummaryToDayRecord(summary: ApiDailySummaryResponse): DayRecord {
+  return {
+    date: summary.date,
+    drinks: summary.logs.map(mapApiLogToDrink),
+    totalHydration: summary.totalEffectiveMl,
+    goal: summary.goalVolumeMl,
   };
 }
 

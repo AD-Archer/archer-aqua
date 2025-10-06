@@ -9,9 +9,10 @@ import (
 
 	"github.com/AD-Archer/archer-aqua/backend/internal/config"
 	"github.com/AD-Archer/archer-aqua/backend/internal/handlers"
+	appmiddleware "github.com/AD-Archer/archer-aqua/backend/internal/middleware"
 	"github.com/AD-Archer/archer-aqua/backend/internal/services"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
 	"gorm.io/gorm"
@@ -27,12 +28,14 @@ func New(cfg config.Config, db *gorm.DB, logger *slog.Logger) *Server {
 	userService := services.NewUserService(db)
 	drinkService := services.NewDrinkService(db)
 	hydrationService := services.NewHydrationService(db)
+	authService := services.NewAuthService(db, cfg)
 
-	api := handlers.NewAPI(userService, drinkService, hydrationService, logger)
+	api := handlers.NewAPI(userService, drinkService, hydrationService, authService, logger)
 
 	r := chi.NewRouter()
 	configureMiddleware(r, cfg)
-	registerRoutes(r, api)
+	authMiddleware := appmiddleware.RequireAuth(authService)
+	registerRoutes(r, api, authMiddleware)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -61,10 +64,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func configureMiddleware(r chi.Router, cfg config.Config) {
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.RealIP)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Timeout(60 * time.Second))
 	r.Use(httprate.LimitByIP(100, time.Minute))
 
 	corsHandler := cors.Handler(cors.Options{
@@ -77,14 +80,22 @@ func configureMiddleware(r chi.Router, cfg config.Config) {
 	})
 
 	r.Use(corsHandler)
-	r.Use(middleware.SetHeader("Cache-Control", "no-store"))
+	r.Use(chimiddleware.SetHeader("Cache-Control", "no-store"))
 }
 
-func registerRoutes(r chi.Router, api *handlers.API) {
+func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Handler) http.Handler) {
 	r.Get("/healthz", handlers.Health)
 
 	r.Route("/api", func(r chi.Router) {
-		r.Route("/users", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", api.Register)
+			r.Post("/login", api.Login)
+			r.Get("/google/login", api.BeginGoogleOAuth)
+			r.Get("/google/callback", api.GoogleOAuthCallback)
+			r.With(authMiddleware).Get("/me", api.Me)
+		})
+
+		r.With(authMiddleware).Route("/users", func(r chi.Router) {
 			r.Post("/", api.CreateUser)
 			r.Route("/{userID}", func(r chi.Router) {
 				r.Get("/", api.GetUser)

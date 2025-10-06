@@ -1,4 +1,5 @@
 import type { DrinkType } from '@/types/water';
+import { clearAuthToken, getAuthToken } from './storage';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '');
 
@@ -6,6 +7,7 @@ type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 interface RequestOptions extends RequestInit {
   method?: HttpMethod;
+  skipAuth?: boolean;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -13,12 +15,25 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new Error('API base URL is not configured. Set VITE_API_BASE_URL in your environment.');
   }
 
-  const headers = new Headers(options.headers);
-  headers.set('Content-Type', 'application/json');
+  const { skipAuth = false, ...fetchOptions } = options;
+
+  const headers = new Headers(fetchOptions.headers);
+
+  const isFormData = fetchOptions.body instanceof FormData;
+  if (!isFormData) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (!skipAuth) {
+    const token = getAuthToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    method: options.method ?? 'GET',
+    ...fetchOptions,
+    method: fetchOptions.method ?? 'GET',
     headers,
   });
 
@@ -31,6 +46,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const data = isJSON ? await response.json() : await response.text();
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      clearAuthToken();
+    }
     const message = isJSON && data?.error ? data.error : response.statusText || 'Unknown error';
     throw new Error(message);
   }
@@ -125,6 +143,28 @@ export interface ApiHydrationStatsResponse {
   bestStreak: number;
   totalVolumeMl: number;
   totalEffectiveMl: number;
+}
+
+export interface ApiAuthResponse {
+  token: string;
+  user: ApiUserResponse;
+  hasProfile: boolean;
+}
+
+export interface ApiAuthStateResponse {
+  user: ApiUserResponse;
+  hasProfile: boolean;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  displayName: string;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
 }
 
 export interface CreateUserPayload {
@@ -231,4 +271,36 @@ export function resolveDrinkLabel(type: DrinkType): string {
 
 export function isApiEnabled(): boolean {
   return apiConfig.isEnabled;
+}
+
+export async function registerUser(payload: RegisterPayload) {
+  return request<ApiAuthResponse>(`/api/auth/register`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipAuth: true,
+  });
+}
+
+export async function loginUser(payload: LoginPayload) {
+  return request<ApiAuthResponse>(`/api/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipAuth: true,
+  });
+}
+
+export async function getAuthState() {
+  return request<ApiAuthStateResponse>(`/api/auth/me`);
+}
+
+export function getGoogleOAuthUrl(redirectUrl: string): string {
+  if (!API_BASE_URL) {
+    throw new Error('API base URL is not configured. Set VITE_API_BASE_URL in your environment.');
+  }
+  const params = new URLSearchParams();
+  if (redirectUrl) {
+    params.set('redirect', redirectUrl);
+  }
+  const suffix = params.toString();
+  return `${API_BASE_URL}/api/auth/google/login${suffix ? `?${params}` : ''}`;
 }

@@ -156,9 +156,12 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
               {record.drinks.slice().reverse().map((drink: Drink) => {
                 const isCustom = drink.type === 'custom' && drink.customDrinkId;
                 const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
-                const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
+                const baseColor = drink.type !== 'custom'
+                  ? DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>]
+                  : undefined;
+                const drinkColor = isCustom && customDrink ? customDrink.color : baseColor ?? '#0ea5e9';
                 const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
-                const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
+                const drinkName = drink.label ?? (isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' '));
                 
                 return (
                   <div

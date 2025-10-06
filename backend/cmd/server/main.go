@@ -11,10 +11,15 @@ import (
 	"github.com/AD-Archer/archer-aqua/backend/internal/config"
 	"github.com/AD-Archer/archer-aqua/backend/internal/db"
 	"github.com/AD-Archer/archer-aqua/backend/internal/server"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	if err := godotenv.Load(); err != nil {
+		logger.Info("skipping .env file load", slog.Any("error", err))
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

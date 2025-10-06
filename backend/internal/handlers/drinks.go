@@ -14,6 +14,10 @@ func (api *API) ListDrinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
 	drinks, err := api.drinks.ListDrinks(r.Context(), userID)
 	if err != nil {
 		logError(api.logger, "list drinks", err)
@@ -33,6 +37,10 @@ func (api *API) CreateDrink(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUUIDParam(r, "userID")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
 		return
 	}
 
@@ -61,6 +69,10 @@ func (api *API) UpdateDrink(w http.ResponseWriter, r *http.Request) {
 	drinkID, err := parseUUIDParam(r, "drinkID")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid drink id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
 		return
 	}
 

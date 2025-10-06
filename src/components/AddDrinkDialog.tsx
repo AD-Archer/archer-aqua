@@ -24,7 +24,7 @@ import * as LucideIcons from 'lucide-react';
 interface AddDrinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddDrink: (type: DrinkType, amount: number, customDrinkId?: string) => void;
+  onAddDrink: (type: DrinkType, amount: number, customDrinkId?: string) => void | Promise<void>;
 }
 
 const DRINK_OPTIONS: Array<{
@@ -93,7 +93,7 @@ export function AddDrinkDialog({ open, onOpenChange, onAddDrink }: AddDrinkDialo
     }
   }, [open]);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     // Use custom amount if provided, otherwise use selected amount
     let amountToAdd = selectedAmount;
     if (customAmount) {
@@ -104,15 +104,20 @@ export function AddDrinkDialog({ open, onOpenChange, onAddDrink }: AddDrinkDialo
       }
     }
 
-    if (selectedType === 'custom' && selectedCustomDrinkId) {
-      onAddDrink(selectedType, amountToAdd, selectedCustomDrinkId);
-    } else {
-      onAddDrink(selectedType, amountToAdd);
+    try {
+      if (selectedType === 'custom' && selectedCustomDrinkId) {
+        await onAddDrink(selectedType, amountToAdd, selectedCustomDrinkId);
+      } else {
+        await onAddDrink(selectedType, amountToAdd);
+      }
+
+      // Reset state
+      setCustomAmount('');
+      onOpenChange(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add drink';
+      toast.error(message);
     }
-    
-    // Reset state
-    setCustomAmount('');
-    onOpenChange(false);
   };
 
   const handleSelectCustomDrink = (drinkId: string) => {
@@ -316,7 +321,7 @@ export function AddDrinkDialog({ open, onOpenChange, onAddDrink }: AddDrinkDialo
           <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleAdd} className="flex-1 bg-gradient-water">
+          <Button onClick={() => void handleAdd()} className="flex-1 bg-gradient-water">
             Add Drink
           </Button>
         </div>

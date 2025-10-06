@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {
@@ -24,4 +26,19 @@ func logError(logger *slog.Logger, msg string, err error) {
 		return
 	}
 	logger.Error(msg, slog.Any("error", err))
+}
+
+func (api *API) authorizeUserRequest(w http.ResponseWriter, r *http.Request, userID uuid.UUID) bool {
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return false
+	}
+
+	if claims.UserID != userID.String() {
+		respondError(w, http.StatusForbidden, "forbidden")
+		return false
+	}
+
+	return true
 }

@@ -20,6 +20,9 @@ export interface Drink {
   amount: number; // in ml
   timestamp: Date;
   hydrationValue: number; // calculated based on type
+  label?: string;
+  backendLogId?: string;
+  source?: 'local' | 'backend';
 }
 
 export interface DayRecord {

@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle } from '@/lib/storage';
 import { format } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
+import { backendIsEnabled } from '@/lib/backend';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,7 +49,7 @@ const Index = () => {
     const seenCombos = new Set<string>();
     
     for (const drink of reversedDrinks) {
-      const combo = `${drink.type}-${drink.amount}-${drink.customDrinkId || ''}`;
+      const combo = `${drink.type}-${drink.label ?? ''}-${drink.amount}-${drink.customDrinkId || ''}`;
       if (!seenCombos.has(combo) && uniqueDrinks.length < 4) {
         uniqueDrinks.push(drink);
         seenCombos.add(combo);
@@ -66,30 +67,40 @@ const Index = () => {
     }
   }, [navigate]);
 
-  const handleQuickAdd = (amount: number) => {
-    addDrink('water', amount, undefined, selectedDate);
-    const isToday = selectedDate === getTodayKey();
-    const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
-    toast.success(`Added ${formatVolume(amount, unitPreference)} of water to ${dateText}!`);
+  const handleQuickAdd = async (amount: number) => {
+    try {
+      await addDrink('water', amount, undefined, selectedDate);
+      const isToday = selectedDate === getTodayKey();
+      const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
+      toast.success(`Added ${formatVolume(amount, unitPreference)} of water to ${dateText}!`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to log water intake';
+      toast.error(message);
+    }
   };
 
-  const handleAddDrink = (type: DrinkType, amount: number, customDrinkId?: string) => {
-    addDrink(type, amount, customDrinkId, selectedDate);
-    const drinkNames: Record<DrinkType, string> = {
-      water: 'water',
-      coffee: 'coffee',
-      tea: 'tea',
-      juice: 'juice',
-      soda: 'soda',
-      alcohol: 'alcohol',
-      energy_drink: 'energy drink',
-      milk: 'milk',
-      sports_drink: 'sports drink',
-      custom: 'custom drink',
-    };
-    const isToday = selectedDate === getTodayKey();
-    const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
-    toast.success(`Added ${formatVolume(amount, unitPreference)} of ${drinkNames[type]} to ${dateText}!`);
+  const handleAddDrink = async (type: DrinkType, amount: number, customDrinkId?: string) => {
+    try {
+      await addDrink(type, amount, customDrinkId, selectedDate);
+      const drinkNames: Record<DrinkType, string> = {
+        water: 'water',
+        coffee: 'coffee',
+        tea: 'tea',
+        juice: 'juice',
+        soda: 'soda',
+        alcohol: 'alcohol',
+        energy_drink: 'energy drink',
+        milk: 'milk',
+        sports_drink: 'sports drink',
+        custom: 'custom drink',
+      };
+      const isToday = selectedDate === getTodayKey();
+      const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
+      toast.success(`Added ${formatVolume(amount, unitPreference)} of ${drinkNames[type]} to ${dateText}!`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add drink';
+      toast.error(message);
+    }
   };
 
   const handleDateSelect = (date: Date) => {
@@ -99,7 +110,11 @@ const Index = () => {
 
   const handleRemoveDrink = (drinkId: string, date?: string) => {
     removeDrink(drinkId, date);
-    toast.success('Drink removed');
+    if (backendIsEnabled()) {
+      toast.info('Removal from the backend will be available soon. This entry may re-sync from the server.');
+    } else {
+      toast.success('Drink removed');
+    }
   };
 
   const current = todayRecord?.totalHydration || 0;
@@ -196,9 +211,12 @@ const Index = () => {
                   {recentUniqueDrinks.map((drink, index) => {
                     const isCustom = drink.type === 'custom' && drink.customDrinkId;
                     const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
-                    const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
+                    const baseColor = drink.type !== 'custom'
+                      ? DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>]
+                      : undefined;
+                    const drinkColor = isCustom && customDrink ? customDrink.color : baseColor ?? '#0ea5e9';
                     const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
-                    const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
+                    const drinkName = drink.label ?? (isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' '));
                     
                     return (
                       <Button
@@ -230,9 +248,12 @@ const Index = () => {
                   {[...allDrinks].reverse().map((drink) => {
                     const isCustom = drink.type === 'custom' && drink.customDrinkId;
                     const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
-                    const drinkColor = isCustom && customDrink ? customDrink.color : DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>];
+                    const baseColor = drink.type !== 'custom'
+                      ? DRINK_COLORS[drink.type as Exclude<DrinkType, 'custom'>]
+                      : undefined;
+                    const drinkColor = isCustom && customDrink ? customDrink.color : baseColor ?? '#0ea5e9';
                     const DrinkIcon = getDrinkIcon(drink.type, drink.customDrinkId);
-                    const drinkName = isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' ');
+                    const drinkName = drink.label ?? (isCustom && customDrink ? customDrink.name : drink.type.replace('_', ' '));
                     
                     return (
                       <div

@@ -16,6 +16,10 @@ func (api *API) LogHydration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
 	var request dto.LogHydrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid payload")
@@ -36,6 +40,10 @@ func (api *API) DailySummary(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUUIDParam(r, "userID")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
 		return
 	}
 
@@ -66,6 +74,10 @@ func (api *API) HydrationStats(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUUIDParam(r, "userID")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
 		return
 	}
 

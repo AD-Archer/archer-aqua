@@ -14,6 +14,8 @@ type User struct {
 	UpdatedAt                 time.Time
 	Email                     string `gorm:"uniqueIndex"`
 	DisplayName               string
+	PasswordHash              *string `gorm:"size:255"`
+	GoogleSubject             *string `gorm:"size:255;uniqueIndex"`
 	WeightKg                  float64
 	Age                       int
 	Gender                    string `gorm:"size:32"`
