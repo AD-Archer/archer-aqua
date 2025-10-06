@@ -253,6 +253,16 @@ export async function getHydrationStats(userId: string, timezone: string, days =
   return request<ApiHydrationStatsResponse>(`/api/users/${userId}/hydration/stats?${params.toString()}`);
 }
 
+export async function getWeeklySummary(userId: string, timezone: string) {
+  const params = new URLSearchParams({ timezone, days: '7' });
+  return request<ApiDailySummaryResponse[]>(`/api/users/${userId}/hydration/weekly?${params.toString()}`);
+}
+
+export async function getAllTimeStats(userId: string, timezone: string) {
+  const params = new URLSearchParams({ timezone });
+  return request<ApiHydrationStatsResponse>(`/api/users/${userId}/hydration/summary?${params.toString()}`);
+}
+
 export function resolveDrinkLabel(type: DrinkType): string {
   const labels: Record<DrinkType, string> = {
     water: 'Water',

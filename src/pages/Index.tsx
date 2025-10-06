@@ -9,13 +9,13 @@ import { StatsView } from '@/components/StatsView';
 import { HydrationStatus } from '@/components/HydrationStatus';
 import { CalendarView } from '@/components/CalendarView';
 import { WeatherCard } from '@/components/WeatherCard';
-import { DrinkType, formatVolume, DRINK_COLORS } from '@/types/water';
+import { DrinkType, DayRecord, formatVolume, DRINK_COLORS } from '@/types/water';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { isAuthenticated, getUnitPreference, getCustomDrinkById, getTodayKey, getUseWeatherAdjustment, getProgressWheelStyle } from '@/lib/storage';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import { backendIsEnabled } from '@/lib/backend';
 import {
@@ -32,9 +32,12 @@ import {
 
 const Index = () => {
   const navigate = useNavigate();
-  const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink } = useWaterTracking();
+  const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink, loadRecordForDate, recordsByDate } = useWaterTracking();
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayKey());
+  const [todayKey, setTodayKey] = useState(getTodayKey());
+  const [selectedDate, setSelectedDate] = useState<string>(todayKey);
+  const [selectedRecord, setSelectedRecord] = useState<DayRecord | null>(todayRecord ?? null);
+  const [isRecordLoading, setIsRecordLoading] = useState(false);
   const [currentTab, setCurrentTab] = useState('today');
   const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
   const [progressWheelStyle, setProgressWheelStyle] = useState(getProgressWheelStyle());
@@ -70,9 +73,17 @@ const Index = () => {
   const handleQuickAdd = async (amount: number) => {
     try {
       await addDrink('water', amount, undefined, selectedDate);
-      const isToday = selectedDate === getTodayKey();
-      const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
+      const isToday = selectedDate === todayKey;
+      const parsedDate = parseISO(selectedDate);
+      const dateText = isToday ? 'today' : format(parsedDate, 'MMM d');
       toast.success(`Added ${formatVolume(amount, unitPreference)} of water to ${dateText}!`);
+      setIsRecordLoading(true);
+      try {
+        const updatedRecord = await loadRecordForDate(selectedDate);
+        setSelectedRecord(updatedRecord);
+      } finally {
+        setIsRecordLoading(false);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to log water intake';
       toast.error(message);
@@ -94,31 +105,92 @@ const Index = () => {
         sports_drink: 'sports drink',
         custom: 'custom drink',
       };
-      const isToday = selectedDate === getTodayKey();
-      const dateText = isToday ? 'today' : format(new Date(selectedDate), 'MMM d');
+      const isToday = selectedDate === todayKey;
+      const parsedDate = parseISO(selectedDate);
+      const dateText = isToday ? 'today' : format(parsedDate, 'MMM d');
       toast.success(`Added ${formatVolume(amount, unitPreference)} of ${drinkNames[type]} to ${dateText}!`);
+      setIsRecordLoading(true);
+      try {
+        const updatedRecord = await loadRecordForDate(selectedDate);
+        setSelectedRecord(updatedRecord);
+      } finally {
+        setIsRecordLoading(false);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add drink';
       toast.error(message);
     }
   };
 
-  const handleDateSelect = (date: Date) => {
+  const handleDateSelect = async (date: Date) => {
     const dateString = format(date, 'yyyy-MM-dd');
     setSelectedDate(dateString);
+    setCurrentTab('calendar');
+    const cached = recordsByDate[dateString];
+    if (cached) {
+      setSelectedRecord(cached);
+      setIsRecordLoading(false);
+      return;
+    }
+    setIsRecordLoading(true);
+    try {
+      const fetched = await loadRecordForDate(dateString);
+      setSelectedRecord(fetched);
+    } finally {
+      setIsRecordLoading(false);
+    }
   };
 
-  const handleRemoveDrink = (drinkId: string, date?: string) => {
+  const handleRemoveDrink = async (drinkId: string, date?: string) => {
     removeDrink(drinkId, date);
     if (backendIsEnabled()) {
       toast.info('Removal from the backend will be available soon. This entry may re-sync from the server.');
     } else {
       toast.success('Drink removed');
     }
+    const targetDate = date ?? selectedDate;
+    setIsRecordLoading(true);
+    try {
+      const updatedRecord = await loadRecordForDate(targetDate);
+      setSelectedRecord(updatedRecord);
+    } finally {
+      setIsRecordLoading(false);
+    }
+  };
+
+  const handleCalendarAddDrink = () => {
+    const nextTodayKey = getTodayKey();
+    setTodayKey(nextTodayKey);
+    setSelectedDate(nextTodayKey);
+    setCurrentTab('today');
+    const todayCandidate = todayRecord ?? recordsByDate[nextTodayKey] ?? null;
+    setSelectedRecord(todayCandidate);
+    setIsRecordLoading(false);
   };
 
   const current = todayRecord?.totalHydration || 0;
   const percentage = (current / goal) * 100;
+
+  useEffect(() => {
+    const nextTodayKey = getTodayKey();
+    setTodayKey(nextTodayKey);
+    if (selectedDate === nextTodayKey) {
+      setSelectedRecord(todayRecord ?? null);
+    }
+  }, [todayRecord, selectedDate]);
+
+  useEffect(() => {
+    const cached = recordsByDate[selectedDate];
+    if (cached) {
+      setSelectedRecord(cached);
+      setIsRecordLoading(false);
+    }
+  }, [recordsByDate, selectedDate]);
+
+  const selectedDateObj = (() => {
+    const parsed = parseISO(selectedDate);
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  })();
 
   return (
     <>
@@ -153,12 +225,21 @@ const Index = () => {
           </Button>
         </header>
 
-        <Tabs defaultValue="today" className="w-full" value={currentTab} onValueChange={(value) => {
-          setCurrentTab(value);
-          if (value === 'today') {
-            setSelectedDate(getTodayKey());
-          }
-        }}>
+        <Tabs
+          defaultValue="today"
+          className="w-full"
+          value={currentTab}
+          onValueChange={(value) => {
+            setCurrentTab(value);
+            if (value === 'today') {
+              const nextTodayKey = getTodayKey();
+              setTodayKey(nextTodayKey);
+              setSelectedDate(nextTodayKey);
+              setSelectedRecord(todayRecord ?? recordsByDate[nextTodayKey] ?? null);
+              setIsRecordLoading(false);
+            }
+          }}
+        >
           <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="today">
               <Droplet className="h-4 w-4 mr-2" />
@@ -299,7 +380,7 @@ const Index = () => {
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleRemoveDrink(drink.id)} className="bg-destructive text-destructive-foreground">
+                                <AlertDialogAction onClick={() => void handleRemoveDrink(drink.id)} className="bg-destructive text-destructive-foreground">
                                   Remove
                                 </AlertDialogAction>
                               </AlertDialogFooter>
@@ -317,8 +398,14 @@ const Index = () => {
           <TabsContent value="calendar" className="space-y-6">
             <CalendarView 
               unitPreference={unitPreference}
+              record={selectedRecord}
+              selectedDate={selectedDateObj}
+              todayKey={todayKey}
+              hydrationHistory={stats.history}
+              recordsByDate={recordsByDate}
+              isLoading={isRecordLoading}
               onRemoveDrink={handleRemoveDrink}
-              onAddDrink={() => {}}
+              onAddDrink={handleCalendarAddDrink}
               onDateSelect={handleDateSelect}
             />
           </TabsContent>

@@ -212,6 +212,15 @@ export function mapBackendStatsToUserStats(stats: ApiHydrationStatsResponse): Us
     totalDaysTracked: achievedDays.length,
     totalWaterConsumed: stats.totalEffectiveMl,
     achievements: [],
+    history: stats.dailySummaries.map((summary) => ({
+      date: summary.date,
+      timezone: summary.timezone,
+      totalVolumeMl: summary.totalVolumeMl,
+      totalEffectiveMl: summary.totalEffectiveMl,
+      goalVolumeMl: summary.goalVolumeMl,
+      progressPercentage: summary.progressPercentage,
+      status: summary.status,
+    })),
   };
 }
 

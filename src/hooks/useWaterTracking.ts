@@ -25,6 +25,7 @@ export function useWaterTracking() {
   const [todayRecord, setTodayRecord] = useState<DayRecord | null>(null);
   const [stats, setStats] = useState<UserStats>(getUserStats());
   const [goal, setGoal] = useState(getDailyGoal());
+  const [recordsByDate, setRecordsByDate] = useState<Record<string, DayRecord>>({});
 
   const loadLocalTodayRecord = useCallback(() => {
     const today = getTodayKey();
@@ -41,6 +42,7 @@ export function useWaterTracking() {
     }
     
     setTodayRecord(record);
+    setRecordsByDate((prev) => ({ ...prev, [record.date]: record }));
     setGoal(record.goal);
   }, []);
 
@@ -61,6 +63,7 @@ export function useWaterTracking() {
       if (record) {
         setTodayRecord(record);
         saveDayRecord(record);
+        setRecordsByDate((prev) => ({ ...prev, [record.date]: record }));
         if (record.goal) {
           setGoal(record.goal);
           saveDailyGoal(record.goal);
@@ -71,8 +74,12 @@ export function useWaterTracking() {
 
       if (statsResponse) {
         const mapped = mapBackendStatsToUserStats(statsResponse);
-        setStats(mapped);
-        saveUserStats(mapped);
+        setStats((prev) => {
+          const achievements = prev.achievements?.length ? prev.achievements : mapped.achievements;
+          const next = { ...mapped, achievements };
+          saveUserStats(next);
+          return next;
+        });
       }
     } catch (error) {
       console.warn('Failed to load backend hydration data', error);
@@ -230,6 +237,7 @@ export function useWaterTracking() {
     };
 
     saveDayRecord(updatedRecord);
+    setRecordsByDate((prev) => ({ ...prev, [updatedRecord.date]: updatedRecord }));
     
     // Update todayRecord if we're adding to today
     if (targetDate === getTodayKey()) {
@@ -244,9 +252,10 @@ export function useWaterTracking() {
     saveDailyGoal(newGoal);
 
     if (todayRecord) {
-      const updatedRecord = { ...todayRecord, goal: newGoal };
-      setTodayRecord(updatedRecord);
-      saveDayRecord(updatedRecord);
+    const updatedRecord = { ...todayRecord, goal: newGoal };
+    setTodayRecord(updatedRecord);
+    saveDayRecord(updatedRecord);
+    setRecordsByDate((prev) => ({ ...prev, [updatedRecord.date]: updatedRecord }));
     }
 
     if (backendIsEnabled()) {
@@ -281,11 +290,49 @@ export function useWaterTracking() {
     };
 
     saveDayRecord(updatedRecord);
+    setRecordsByDate((prev) => ({ ...prev, [updatedRecord.date]: updatedRecord }));
     
     if (targetDate === getTodayKey()) {
       setTodayRecord(updatedRecord);
     }
   }, [refreshBackendData, todayRecord]);
+
+  const loadRecordForDate = useCallback(async (date: string): Promise<DayRecord | null> => {
+    if (recordsByDate[date]) {
+      return recordsByDate[date];
+    }
+
+    if (backendIsEnabled()) {
+      try {
+        const record = await fetchDayRecordFromBackend(date, getTimezone());
+        if (record) {
+          saveDayRecord(record);
+          setRecordsByDate((prev) => ({ ...prev, [date]: record }));
+          if (date === getTodayKey()) {
+            setTodayRecord(record);
+            if (record.goal) {
+              setGoal(record.goal);
+            }
+          }
+          return record;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch day record from backend', error);
+      }
+    }
+
+    const localRecord = getDayRecord(date);
+    if (localRecord) {
+      setRecordsByDate((prev) => ({ ...prev, [date]: localRecord }));
+      if (date === getTodayKey()) {
+        setTodayRecord(localRecord);
+        setGoal(localRecord.goal);
+      }
+      return localRecord;
+    }
+
+    return null;
+  }, [recordsByDate]);
 
   return {
     todayRecord,
@@ -294,5 +341,7 @@ export function useWaterTracking() {
     addDrink,
     updateGoal,
     removeDrink,
+    loadRecordForDate,
+    recordsByDate,
   };
 }

@@ -37,7 +37,9 @@ func Connect(cfg config.Config, appLogger *slog.Logger) (*gorm.DB, error) {
 
 	configureConnectionPool(sqlDB)
 
-	if err := database.Exec("SET TIME ZONE ?", cfg.DatabaseTimeZone).Error; err != nil {
+	// Set timezone using raw SQL instead of prepared statement
+	query := fmt.Sprintf("SET TIME ZONE '%s'", cfg.DatabaseTimeZone)
+	if err := database.Exec(query).Error; err != nil {
 		appLogger.Warn("failed to set session time zone", slog.Any("error", err))
 	}
 

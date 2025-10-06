@@ -25,6 +25,16 @@ export interface Drink {
   source?: 'local' | 'backend';
 }
 
+export interface DailyHydrationSummary {
+  date: string;
+  timezone: string;
+  totalVolumeMl: number;
+  totalEffectiveMl: number;
+  goalVolumeMl: number;
+  progressPercentage: number;
+  status: string;
+}
+
 export interface DayRecord {
   date: string; // YYYY-MM-DD
   drinks: Drink[];
@@ -49,6 +59,7 @@ export interface UserStats {
   totalDaysTracked: number;
   totalWaterConsumed: number;
   achievements: Achievement[];
+  history?: DailyHydrationSummary[];
 }
 
 export type Gender = 'male' | 'female' | 'other';

@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus, CheckCircle2, Circle } from 'lucide-react';
-import { getDayRecord, getTodayKey, getCustomDrinkById } from '@/lib/storage';
-import { DrinkType, DRINK_COLORS, formatVolume, VolumeUnit, Drink } from '@/types/water';
-import { format } from 'date-fns';
+import { getCustomDrinkById } from '@/lib/storage';
+import { DrinkType, DRINK_COLORS, formatVolume, VolumeUnit, Drink, DayRecord, DailyHydrationSummary } from '@/types/water';
+import { format, parseISO } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import {
   AlertDialog,
@@ -21,34 +21,98 @@ import {
 
 interface CalendarViewProps {
   unitPreference: VolumeUnit;
-  onRemoveDrink: (drinkId: string, date: string) => void;
+  record: DayRecord | null;
+  selectedDate: Date;
+  todayKey: string;
+  hydrationHistory?: DailyHydrationSummary[];
+  recordsByDate?: Record<string, DayRecord>;
+  isLoading?: boolean;
+  onRemoveDrink: (drinkId: string, date: string) => void | Promise<void>;
   onAddDrink: () => void;
-  onDateSelect: (date: Date) => void;
+  onDateSelect: (date: Date) => void | Promise<void>;
 }
 
-export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDateSelect }: CalendarViewProps) {
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedDateString, setSelectedDateString] = useState(getTodayKey());
+export function CalendarView({
+  unitPreference,
+  record,
+  hydrationHistory,
+  recordsByDate,
+  selectedDate,
+  todayKey,
+  isLoading = false,
+  onRemoveDrink,
+  onAddDrink,
+  onDateSelect,
+}: CalendarViewProps) {
+  const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+  const isToday = selectedDateString === todayKey;
+  const isFutureDate = selectedDate > new Date();
+
+  const historyMap = useMemo(() => {
+    const map = new Map<string, DailyHydrationSummary>();
+    hydrationHistory?.forEach((entry) => {
+      map.set(entry.date, entry);
+    });
+    return map;
+  }, [hydrationHistory]);
+
+  const recordsMap = useMemo(() => recordsByDate ?? {}, [recordsByDate]);
+
+  const calendarModifiers = useMemo(() => ({
+    hasData: (date: Date) => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const dayRecord = recordsMap[dateKey];
+      if (dayRecord) {
+        return dayRecord.drinks.length > 0 || dayRecord.totalHydration > 0;
+      }
+      const historyEntry = historyMap.get(dateKey);
+      return historyEntry ? historyEntry.totalVolumeMl > 0 : false;
+    },
+    goalMet: (date: Date) => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const dayRecord = recordsMap[dateKey];
+      if (dayRecord) {
+        return dayRecord.totalHydration >= dayRecord.goal;
+      }
+      const historyEntry = historyMap.get(dateKey);
+      return historyEntry ? historyEntry.status === 'completed' : false;
+    },
+  }), [recordsMap, historyMap]);
+
+  const displayRecord = useMemo(() => {
+    if (record && record.date === selectedDateString) {
+      return record;
+    }
+    if (recordsMap[selectedDateString]) {
+      return recordsMap[selectedDateString];
+    }
+    const historyEntry = historyMap.get(selectedDateString);
+    if (!historyEntry) {
+      return null;
+    }
+    return {
+      date: historyEntry.date,
+      drinks: [],
+      totalHydration: historyEntry.totalEffectiveMl,
+      goal: historyEntry.goalVolumeMl,
+    } as DayRecord;
+  }, [record, recordsMap, historyMap, selectedDateString]);
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      setSelectedDate(date);
-      const dateString = format(date, 'yyyy-MM-dd');
-      setSelectedDateString(dateString);
-      onDateSelect(date);
+    if (!date) {
+      return;
     }
+    void onDateSelect(date);
   };
 
   const handleTodayClick = () => {
-    const today = new Date();
-    setSelectedDate(today);
-    setSelectedDateString(getTodayKey());
-    onDateSelect(today);
+    const today = parseISO(todayKey);
+    void onDateSelect(Number.isNaN(today.getTime()) ? new Date() : today);
   };
 
-  const record = getDayRecord(selectedDateString);
-  const isToday = selectedDateString === getTodayKey();
-  const isFutureDate = new Date(selectedDateString) > new Date();
+  const drinks = displayRecord?.drinks ?? [];
+  const totalHydration = displayRecord?.totalHydration ?? 0;
+  const goal = displayRecord?.goal ?? 0;
 
   return (
     <div className="space-y-6">
@@ -74,18 +138,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
             selected={selectedDate}
             onSelect={handleDateSelect}
             className="rounded-md border"
-            modifiers={{
-              hasData: (date) => {
-                const dateString = format(date, 'yyyy-MM-dd');
-                const dayRecord = getDayRecord(dateString);
-                return dayRecord !== null && dayRecord.drinks.length > 0;
-              },
-              goalMet: (date) => {
-                const dateString = format(date, 'yyyy-MM-dd');
-                const dayRecord = getDayRecord(dateString);
-                return dayRecord !== null && dayRecord.totalHydration >= dayRecord.goal;
-              },
-            }}
+            modifiers={calendarModifiers}
             modifiersClassNames={{
               hasData: 'font-bold underline decoration-primary decoration-2 underline-offset-2',
               goalMet: 'bg-green-500/20 text-green-700 dark:text-green-300 font-extrabold ring-2 ring-green-500/50',
@@ -134,7 +187,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
                 {isToday ? "Today's Drinks" : format(selectedDate, 'MMMM d, yyyy')}
               </CardTitle>
               <CardDescription>
-                {record ? `${record.drinks.length} drink${record.drinks.length !== 1 ? 's' : ''} • ${formatVolume(record.totalHydration, unitPreference)} hydration` : 'No drinks recorded'}
+                {displayRecord ? `${drinks.length} drink${drinks.length !== 1 ? 's' : ''} • ${formatVolume(totalHydration, unitPreference)} hydration` : 'No drinks recorded'}
               </CardDescription>
             </div>
             <Button onClick={onAddDrink} size="sm" variant="outline">
@@ -144,7 +197,11 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
           </div>
         </CardHeader>
         <CardContent>
-          {!record || record.drinks.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Loading hydration data...</p>
+            </div>
+          ) : !displayRecord || drinks.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>No drinks recorded for this date</p>
               {isFutureDate && (
@@ -153,7 +210,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
             </div>
           ) : (
             <div className="space-y-2">
-              {record.drinks.slice().reverse().map((drink: Drink) => {
+              {drinks.slice().reverse().map((drink: Drink) => {
                 const isCustom = drink.type === 'custom' && drink.customDrinkId;
                 const customDrink = isCustom ? getCustomDrinkById(drink.customDrinkId!) : null;
                 const baseColor = drink.type !== 'custom'
@@ -208,7 +265,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction 
-                              onClick={() => onRemoveDrink(drink.id, selectedDateString)} 
+                              onClick={() => void onRemoveDrink(drink.id, selectedDateString)} 
                               className="bg-destructive text-destructive-foreground"
                             >
                               Remove
@@ -225,7 +282,7 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
         </CardContent>
       </Card>
 
-      {record && (
+      {displayRecord && (
         <Card>
           <CardHeader>
             <CardTitle>Daily Summary</CardTitle>
@@ -235,25 +292,25 @@ export function CalendarView({ unitPreference, onRemoveDrink, onAddDrink, onDate
               <div>
                 <p className="text-sm text-muted-foreground">Total Hydration</p>
                 <p className="text-2xl font-bold text-primary">
-                  {formatVolume(record.totalHydration, unitPreference)}
+                  {formatVolume(totalHydration, unitPreference)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Daily Goal</p>
                 <p className="text-2xl font-bold">
-                  {formatVolume(record.goal, unitPreference)}
+                  {formatVolume(goal, unitPreference)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Progress</p>
                 <p className="text-2xl font-bold">
-                  {((record.totalHydration / record.goal) * 100).toFixed(0)}%
+                  {goal > 0 ? ((totalHydration / goal) * 100).toFixed(0) : '0'}%
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <div className={`flex items-center gap-2 text-xl font-bold ${record.totalHydration >= record.goal ? 'text-green-500' : 'text-yellow-500'}`}>
-                  {record.totalHydration >= record.goal ? (
+                <div className={`flex items-center gap-2 text-xl font-bold ${totalHydration >= goal && goal > 0 ? 'text-green-500' : 'text-yellow-500'}`}>
+                  {totalHydration >= goal && goal > 0 ? (
                     <>
                       <CheckCircle2 className="h-6 w-6" />
                       <span>Met</span>
