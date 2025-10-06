@@ -1,12 +1,83 @@
-import { DayRecord, UserStats, Achievement } from '@/types/water';
+import { DayRecord, UserStats, Achievement, UserProfile } from '@/types/water';
 
 const STORAGE_KEYS = {
   DAYS: 'archer_aqua_days',
   STATS: 'archer_aqua_stats',
   GOAL: 'archer_aqua_goal',
+  USER: 'archer_aqua_user',
+  PROFILE: 'archer_aqua_profile',
+  IS_AUTHENTICATED: 'archer_aqua_auth',
 };
 
 export const DEFAULT_GOAL = 2500; // 2.5L in ml
+
+// Calculate personalized hydration goal based on user profile
+export function calculatePersonalizedGoal(profile: UserProfile): number {
+  // Base calculation: 35ml per kg of body weight
+  let baseGoal = profile.weight * 35;
+
+  // Adjust for activity level
+  const activityMultipliers = {
+    sedentary: 1.0,
+    light: 1.1,
+    moderate: 1.2,
+    active: 1.3,
+    very_active: 1.5,
+  };
+  baseGoal *= activityMultipliers[profile.activityLevel];
+
+  // Adjust for climate
+  const climateMultipliers = {
+    cold: 0.9,
+    moderate: 1.0,
+    hot: 1.2,
+  };
+  baseGoal *= climateMultipliers[profile.climate];
+
+  // Adjust for age (older adults need slightly more)
+  if (profile.age > 65) {
+    baseGoal *= 1.1;
+  }
+
+  // Round to nearest 100ml
+  return Math.round(baseGoal / 100) * 100;
+}
+
+// User Profile Management
+export function getUserProfile(): UserProfile | null {
+  const data = localStorage.getItem(STORAGE_KEYS.PROFILE);
+  if (data) {
+    const profile = JSON.parse(data);
+    return {
+      ...profile,
+      createdAt: new Date(profile.createdAt),
+    };
+  }
+  return null;
+}
+
+export function saveUserProfile(profile: UserProfile): void {
+  localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
+}
+
+// Simple Auth Management
+export function saveUser(email: string, name: string): void {
+  localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify({ email, name }));
+  localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
+}
+
+export function getUser(): { email: string; name: string } | null {
+  const data = localStorage.getItem(STORAGE_KEYS.USER);
+  return data ? JSON.parse(data) : null;
+}
+
+export function isAuthenticated(): boolean {
+  return localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED) === 'true';
+}
+
+export function logout(): void {
+  localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
+}
 
 export function getTodayKey(): string {
   return new Date().toISOString().split('T')[0];

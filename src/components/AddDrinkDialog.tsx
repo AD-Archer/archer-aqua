@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Droplet, Coffee, Wine, Grape, Zap } from 'lucide-react';
+import { Droplet, Coffee, Wine, Grape, Zap, Milk, Battery } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AddDrinkDialogProps {
@@ -24,10 +24,13 @@ const DRINK_OPTIONS: Array<{
   color: string;
 }> = [
   { type: 'water', label: 'Water', icon: <Droplet className="h-5 w-5" />, color: 'primary' },
-  { type: 'coffee', label: 'Coffee', icon: <Coffee className="h-5 w-5" />, color: 'secondary' },
+  { type: 'sports_drink', label: 'Sports', icon: <Zap className="h-5 w-5" />, color: 'primary' },
+  { type: 'milk', label: 'Milk', icon: <Milk className="h-5 w-5" />, color: 'secondary' },
   { type: 'tea', label: 'Tea', icon: <Coffee className="h-5 w-5" />, color: 'secondary' },
   { type: 'juice', label: 'Juice', icon: <Grape className="h-5 w-5" />, color: 'accent' },
+  { type: 'coffee', label: 'Coffee', icon: <Coffee className="h-5 w-5" />, color: 'muted' },
   { type: 'soda', label: 'Soda', icon: <Zap className="h-5 w-5" />, color: 'muted' },
+  { type: 'energy_drink', label: 'Energy', icon: <Battery className="h-5 w-5" />, color: 'destructive' },
   { type: 'alcohol', label: 'Alcohol', icon: <Wine className="h-5 w-5" />, color: 'destructive' },
 ];
 

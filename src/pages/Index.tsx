@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWaterTracking } from '@/hooks/useWaterTracking';
 import { CircularProgress } from '@/components/CircularProgress';
 import { QuickAddButtons } from '@/components/QuickAddButtons';
@@ -11,21 +12,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Trophy, BarChart3, Droplet } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { isAuthenticated } from '@/lib/storage';
 
 const Index = () => {
+  const navigate = useNavigate();
   const { todayRecord, stats, goal, addDrink, updateGoal } = useWaterTracking();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [newGoal, setNewGoal] = useState((goal / 1000).toString());
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      navigate('/');
+    }
+  }, [navigate]);
 
   const handleQuickAdd = (amount: number) => {
     addDrink('water', amount);
@@ -41,19 +39,11 @@ const Index = () => {
       juice: 'juice',
       soda: 'soda',
       alcohol: 'alcohol',
+      energy_drink: 'energy drink',
+      milk: 'milk',
+      sports_drink: 'sports drink',
     };
     toast.success(`Added ${amount}ml of ${drinkNames[type]}!`);
-  };
-
-  const handleUpdateGoal = () => {
-    const goalInMl = parseFloat(newGoal) * 1000;
-    if (goalInMl > 0 && goalInMl <= 10000) {
-      updateGoal(goalInMl);
-      setSettingsOpen(false);
-      toast.success('Daily goal updated!');
-    } else {
-      toast.error('Please enter a valid goal (0.5 - 10L)');
-    }
   };
 
   const current = todayRecord?.totalHydration || 0;
@@ -79,7 +69,7 @@ const Index = () => {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => navigate('/settings')}
             className="rounded-full"
           >
             <Settings className="h-5 w-5" />
@@ -175,41 +165,6 @@ const Index = () => {
           onOpenChange={setDialogOpen}
           onAddDrink={handleAddDrink}
         />
-
-        {/* Settings Dialog */}
-        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Settings</DialogTitle>
-              <DialogDescription>Customize your daily water goal</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="goal">Daily Goal (Liters)</Label>
-                <Input
-                  id="goal"
-                  type="number"
-                  step="0.1"
-                  min="0.5"
-                  max="10"
-                  value={newGoal}
-                  onChange={(e) => setNewGoal(e.target.value)}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Recommended: 2-3 liters per day
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setSettingsOpen(false)} className="flex-1">
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateGoal} className="flex-1 bg-gradient-water">
-                Save
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );
