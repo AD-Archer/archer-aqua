@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
   TIMEZONE: 'archer_aqua_timezone',
   USE_WEATHER_ADJUSTMENT: 'archer_aqua_use_weather_adjustment',
   PROGRESS_WHEEL_STYLE: 'archer_aqua_progress_wheel_style',
+  BACKEND_USER_ID: 'archer_aqua_backend_user_id',
+  BACKEND_DRINK_MAP: 'archer_aqua_backend_drink_map',
 };
 
 export const DEFAULT_GOAL = 2500; // 2.5L in ml
@@ -151,6 +153,27 @@ export function saveUser(email: string, name: string): void {
 export function getUser(): { email: string; name: string } | null {
   const data = localStorage.getItem(STORAGE_KEYS.USER);
   return data ? JSON.parse(data) : null;
+}
+
+export function getBackendUserId(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.BACKEND_USER_ID);
+}
+
+export function saveBackendUserId(userId: string): void {
+  localStorage.setItem(STORAGE_KEYS.BACKEND_USER_ID, userId);
+}
+
+export function clearBackendUserId(): void {
+  localStorage.removeItem(STORAGE_KEYS.BACKEND_USER_ID);
+}
+
+export function getBackendDrinkMap(): Record<string, string> {
+  const stored = localStorage.getItem(STORAGE_KEYS.BACKEND_DRINK_MAP);
+  return stored ? JSON.parse(stored) : {};
+}
+
+export function saveBackendDrinkMap(map: Record<string, string>): void {
+  localStorage.setItem(STORAGE_KEYS.BACKEND_DRINK_MAP, JSON.stringify(map));
 }
 
 export function isAuthenticated(): boolean {

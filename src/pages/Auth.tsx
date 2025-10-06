@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveUser, isAuthenticated } from '@/lib/storage';
+import { ensureBackendUser } from '@/lib/backend';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -21,7 +22,7 @@ export default function Auth() {
     }
   }, [navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password) {
@@ -47,7 +48,18 @@ export default function Auth() {
     }
 
     // Save user (simplified auth)
-    saveUser(email, isSignUp ? name : email.split('@')[0]);
+    const displayName = isSignUp ? name : email.split('@')[0];
+    saveUser(email, displayName);
+
+    if (import.meta.env.VITE_API_BASE_URL) {
+      try {
+        await ensureBackendUser();
+      } catch (error) {
+        console.error('Failed to sync user with backend', error);
+        toast.error('Signed in locally, but failed to sync with backend. Check the server connection.');
+      }
+    }
+
     toast.success(isSignUp ? 'Account created successfully!' : 'Welcome back!');
     navigate('/profile-setup');
   };

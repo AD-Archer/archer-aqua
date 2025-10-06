@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Droplet } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, saveDailyGoal, isAuthenticated, saveWeightUnitPreference, getWeightUnitPreference, saveTemperatureUnitPreference, getTemperatureUnitPreference, saveTimezone, getTimezone, saveUseWeatherAdjustment, getUseWeatherAdjustment } from '@/lib/storage';
+import { syncProfileToBackend } from '@/lib/backend';
 import { Gender, ActivityLevel, UserProfile, WeightUnit, lbsToKg, kgToLbs, TemperatureUnit } from '@/types/water';
 import { getWeatherData } from '@/lib/weather';
 import { LocationPicker } from '@/components/LocationPicker';
@@ -90,7 +91,7 @@ export default function ProfileSetup() {
     toast.success('Weather tracking disabled');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const weightValue = parseFloat(weight);
@@ -135,6 +136,15 @@ export default function ProfileSetup() {
     const personalizedGoal = calculatePersonalizedGoal(profile, useWeather);
     saveDailyGoal(personalizedGoal);
     
+    if (import.meta.env.VITE_API_BASE_URL) {
+      try {
+        await syncProfileToBackend();
+      } catch (error) {
+        console.error('Failed to sync profile with backend', error);
+        toast.error('Profile saved locally, but backend sync failed. Please check your connection.');
+      }
+    }
+
     toast.success(`Your daily goal is set to ${(personalizedGoal / 1000).toFixed(1)}L`);
     navigate('/app');
   };
@@ -317,7 +327,15 @@ export default function ProfileSetup() {
             </div>
           </form>
         </CardContent>
+        <Button
+          type="button"
+          className="w-full bg-gradient-water"
+          onClick={() => navigate('/app')}
+        >
+          Get started
+        </Button>
+
       </Card>
-    </div>
+</div>
   );
 }
