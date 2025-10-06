@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWaterTracking } from '@/hooks/useWaterTracking';
+import { SEO } from '@/components/SEO';
 import { CircularProgress } from '@/components/CircularProgress';
 import { QuickAddButtons } from '@/components/QuickAddButtons';
 import { AchievementCard } from '@/components/AchievementCard';
@@ -105,13 +106,19 @@ const Index = () => {
   const percentage = (current / goal) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-sky">
-      <div className="container max-w-2xl mx-auto px-4 py-8">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-              <Droplet className="h-7 w-7 text-primary" />
+    <>
+      <SEO 
+        title="Dashboard"
+        description="Track your daily water intake with Archer Aqua. Monitor hydration levels, view achievements, and stay healthy with AI-powered insights."
+        url="https://aqua.adarcher.app/"
+      />
+      <div className="min-h-screen bg-gradient-sky">
+        <div className="container max-w-2xl mx-auto px-4 py-8">
+          {/* Header */}
+          <header className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                <Droplet className="h-7 w-7 text-primary" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">
@@ -307,6 +314,7 @@ const Index = () => {
         </Tabs>
       </div>
     </div>
+    </>
   );
 };
 

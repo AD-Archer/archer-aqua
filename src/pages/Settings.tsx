@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SEO } from '@/components/SEO';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -289,14 +290,20 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-sky">
-      <div className="container max-w-2xl mx-auto px-4 py-8">
-        <header className="flex items-center gap-4 mb-8">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => navigate('/app')}
-            className="rounded-full"
+    <>
+      <SEO 
+        title="Settings"
+        description="Customize your Archer Aqua experience. Adjust units, set personalized goals, and manage your hydration preferences."
+        url="https://aqua.adarcher.app/settings"
+      />
+      <div className="min-h-screen bg-gradient-sky">
+        <div className="container max-w-2xl mx-auto px-4 py-8">
+          <header className="flex items-center gap-4 mb-8">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate('/app')}
+              className="rounded-full"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -882,5 +889,6 @@ export default function Settings() {
         </div>
       </div>
     </div>
+    </>
   );
 }

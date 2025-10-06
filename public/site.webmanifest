@@ -1,21 +1,43 @@
 {
-  "name": "ArcherAqua",
-  "short_name": "Aqua",
+  "name": "Archer Aqua - Water Tracking & Hydration",
+  "short_name": "Archer Aqua",
+  "description": "AI-powered hydration app. Track your daily water intake, unlock achievements, and stay healthy.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#5bd7d5",
+  "background_color": "#ffffff",
   "icons": [
+    {
+      "src": "/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
     {
       "src": "/web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
       "src": "/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ],
-  "theme_color": "#5bd7d5",
-  "background_color": "#5bd7d5",
-  "display": "standalone"
+  "categories": [
+    "health",
+    "fitness",
+    "lifestyle",
+    "productivity"
+  ],
+  "screenshots": [
+    {
+      "src": "/hero-image.png",
+      "sizes": "1200x630",
+      "type": "image/png"
+    }
+  ]
 }

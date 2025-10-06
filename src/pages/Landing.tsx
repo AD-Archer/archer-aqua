@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { SEO } from '@/components/SEO';
 import { Droplet, Target, Trophy, TrendingUp, Activity, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import heroImage from '@/assets/hero-image.png';
@@ -8,7 +9,9 @@ export default function Landing() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-sky">
+    <>
+      <SEO />
+      <div className="min-h-screen bg-gradient-sky">
       {/* Hero Section */}
       <section className="container max-w-6xl mx-auto px-4 py-16">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -152,5 +155,6 @@ export default function Landing() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

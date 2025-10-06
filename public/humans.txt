@@ -1,0 +1,11 @@
+/* TEAM */
+Developer: Antonio Archer
+Site: https://www.antonioarcher.com
+Twitter: @ad_archer_
+Location: Philadelphia, PA, USA
+
+/* SITE */
+Last update: 2025/10/06
+Standards: HTML5, CSS3, JavaScript, TypeScript, React
+Components: Vite, React, TypeScript, Tailwind CSS, shadcn/ui
+Software: VS Code, Git
