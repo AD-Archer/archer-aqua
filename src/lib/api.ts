@@ -10,24 +10,9 @@ interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
-// Global error handler for API errors
-function handleApiError(error: Error, path: string): never {
-  // Check if it's a network error (backend not available)
-  if (error.name === 'TypeError' && error.message.includes('fetch')) {
-    // Network error - redirect to connection error page
-    window.location.href = '/connection-error';
-    throw error;
-  }
-
-  // Check for specific HTTP status codes that indicate backend issues
-  if (error.message.includes('500') || error.message.includes('502') || error.message.includes('503') || error.message.includes('504')) {
-    // Server error - redirect to general error page
-    window.location.href = '/error';
-    throw error;
-  }
-
-  // For other errors, re-throw as normal
-  throw error;
+interface RequestOptions extends RequestInit {
+  method?: HttpMethod;
+  skipAuth?: boolean;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -51,34 +36,29 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
   }
 
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...fetchOptions,
-      method: fetchOptions.method ?? 'GET',
-      headers,
-    });
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...fetchOptions,
+    method: fetchOptions.method ?? 'GET',
+    headers,
+  });
 
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    const contentType = response.headers.get('Content-Type');
-    const isJSON = contentType?.includes('application/json');
-    const data = isJSON ? await response.json() : await response.text();
-
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        clearAuthToken();
-      }
-      const message = isJSON && data?.error ? data.error : response.statusText || 'Unknown error';
-      throw new Error(message);
-    }
-
-    return data as T;
-  } catch (error) {
-    // Handle API errors globally
-    handleApiError(error as Error, path);
+  if (response.status === 204) {
+    return undefined as T;
   }
+
+  const contentType = response.headers.get('Content-Type');
+  const isJSON = contentType?.includes('application/json');
+  const data = isJSON ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      clearAuthToken();
+    }
+    const message = isJSON && data?.error ? data.error : response.statusText || 'Unknown error';
+    throw new Error(message);
+  }
+
+  return data as T;
 }
 
 export interface ApiLocationPayload {
@@ -513,25 +493,20 @@ export async function registerUser(payload: RegisterPayload) {
 }
 
 export async function loginUser(payload: LoginPayload): Promise<ApiAuthResponse | ApiTwoFactorRequiredResponse> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error || `HTTP ${response.status}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    // Handle API errors globally
-    handleApiError(error as Error, '/api/auth/login');
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `HTTP ${response.status}`);
   }
+
+  return response.json();
 }
 
 export async function getAuthState() {

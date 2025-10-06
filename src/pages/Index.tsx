@@ -79,16 +79,26 @@ const Index = () => {
 
   useEffect(() => {
     const checkAuthAndProfile = async () => {
+      console.log('Index: Starting auth check');
+      console.log('Index: isAuthenticated:', isAuthenticated());
+      
       if (!isAuthenticated()) {
+        console.log('Index: Not authenticated, redirecting to /');
         navigate('/');
         return;
       }
 
+      console.log('Index: User is authenticated');
+
       // Check if profile is complete in backend
       if (backendIsEnabled()) {
+        console.log('Index: Backend is enabled, checking auth state');
         try {
           const authState = await getAuthState();
+          console.log('Index: Auth state received:', authState);
+          
           if (!authState?.hasProfile) {
+            console.log('Index: Profile not complete, redirecting to profile setup');
             // Profile not complete, redirect to setup
             navigate('/profile-setup', { replace: true });
             return;
@@ -96,29 +106,43 @@ const Index = () => {
 
           // Check if policies need to be accepted
           if (authState.requiresPolicyAcceptance) {
+            console.log('Index: Policies need acceptance, showing dialog');
             setRequiresPrivacy(authState.user.requiresPrivacyAcceptance || false);
             setRequiresTerms(authState.user.requiresTermsAcceptance || false);
             setShowPolicyDialog(true);
+            setIsCheckingProfile(false);
             return;
           }
+          
+          console.log('Index: Auth check complete, no policies needed');
         } catch (error) {
-          console.warn('Failed to check backend profile status', error);
+          console.warn('Index: Failed to check backend profile status', error);
           // Fallback to local check
           const localProfile = getUserProfile();
+          console.log('Index: Local profile:', localProfile);
+          
           if (!localProfile || !localProfile.weight || !localProfile.age) {
+            console.log('Index: Local profile incomplete, redirecting to profile setup');
             navigate('/profile-setup', { replace: true });
             return;
           }
+          
+          console.log('Index: Local profile complete, continuing');
         }
       } else {
+        console.log('Index: Backend not enabled, checking local profile');
         // Check local profile
         const localProfile = getUserProfile();
         if (!localProfile || !localProfile.weight || !localProfile.age) {
+          console.log('Index: Local profile incomplete, redirecting to profile setup');
           navigate('/profile-setup', { replace: true });
           return;
         }
+        
+        console.log('Index: Local profile complete');
       }
       
+      console.log('Index: Setting isCheckingProfile to false');
       setIsCheckingProfile(false);
     };
 

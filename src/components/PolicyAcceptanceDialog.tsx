@@ -41,7 +41,7 @@ export function PolicyAcceptanceDialog({
 
     setIsSubmitting(true);
     try {
-      let user: ApiUserResponse;
+      let user: ApiUserResponse | undefined;
 
       if (requiresPrivacy) {
         user = await acceptPrivacy(CURRENT_PRIVACY_VERSION);
@@ -51,8 +51,8 @@ export function PolicyAcceptanceDialog({
         user = await acceptTerms(CURRENT_TERMS_VERSION);
       }
 
-      // If both were required, the last call will have the updated user
-      if (user!) {
+      // At least one policy should have been required, so user should be defined
+      if (user) {
         onAccepted(user);
       }
 
