@@ -135,6 +135,13 @@ export default function Terms() {
                 </a>
                 .
               </p>
+              <p className="text-muted-foreground">
+                Archer Aqua is open source! You can review our source code and contribute at{' '}
+                <a className="text-primary underline" href="https://github.com/ad-archer/archer-aqua" target="_blank" rel="noopener noreferrer">
+                  github.com/ad-archer/archer-aqua
+                </a>
+                .
+              </p>
             </section>
 
             <footer className="rounded-lg bg-muted/40 p-6 text-sm text-muted-foreground">

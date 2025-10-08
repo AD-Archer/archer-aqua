@@ -93,7 +93,7 @@ export default function Privacy() {
               </p>
               <p className="text-muted-foreground">
                 Despite our efforts, no system is entirely immune to risk. We encourage strong passwords, 2FA, and
-                promptly reporting any suspicious activity to security@adarcher.app.
+                promptly reporting any suspicious activity to antonioarcher.dev@gmail.com.
               </p>
             </section>
 
@@ -126,6 +126,13 @@ export default function Privacy() {
                   antonioarcher.dev@gmail.com
                 </a>
                 . We respond to verified requests within 30 days.
+              </p>
+              <p className="text-muted-foreground">
+                Archer Aqua is open source! You can review our source code and contribute at{' '}
+                <a className="text-primary underline" href="https://github.com/ad-archer/archer-aqua" target="_blank" rel="noopener noreferrer">
+                  github.com/ad-archer/archer-aqua
+                </a>
+                .
               </p>
             </section>
 
