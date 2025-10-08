@@ -514,6 +514,10 @@ export function useWaterTracking() {
     return null;
   }, [recordsByDate]);
 
+  const refreshData = useCallback(async () => {
+    await refreshBackendData(true);
+  }, [refreshBackendData]);
+
   return {
     todayRecord,
     stats,
@@ -525,5 +529,6 @@ export function useWaterTracking() {
     loadRecordForDate,
     recordsByDate,
     isLoading,
+    refreshData,
   };
 }

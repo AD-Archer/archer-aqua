@@ -34,7 +34,7 @@ import { AchievementCard } from '@/components/AchievementCard';
 const Index = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { todayRecord, stats, goal, addDrink, updateGoal, setDailyGoal, removeDrink, loadRecordForDate, recordsByDate, isLoading: isDataLoading } = useWaterTracking();
+  const { todayRecord, stats, goal, addDrink, updateGoal, setDailyGoal, removeDrink, loadRecordForDate, recordsByDate, isLoading: isDataLoading, refreshData } = useWaterTracking();
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
   const [todayKey, setTodayKey] = useState(getTodayKey());
   const [selectedDate, setSelectedDate] = useState<string>(todayKey);
@@ -284,6 +284,13 @@ const Index = () => {
 
     return () => clearTimeout(timer);
   }, [location.pathname]); // Reset loading on navigation
+
+  // Refresh data when navigating back to this page
+  useEffect(() => {
+    if (location.pathname === '/' && !isCheckingProfile) {
+      refreshData();
+    }
+  }, [location.pathname, isCheckingProfile, refreshData]);
 
   useEffect(() => {
     if (backendHealthy === false) {

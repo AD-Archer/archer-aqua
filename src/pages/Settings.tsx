@@ -317,25 +317,15 @@ export default function Settings() {
     setUsePersonalizedGoal(true);
     saveGoalMode('personalized');
 
-    // Set the daily goal for today
-    const today = getTodayKey();
-    if (backendIsEnabled() && isAuthenticated()) {
-      try {
-        const userId = getBackendUserId();
-        if (userId) {
-          await setDailyGoal(userId, today, personalizedGoalMl);
-        }
-      } catch (error) {
-        console.warn('Failed to set daily goal for today', error);
-        // Don't fail the whole operation if this fails
-      }
-    }
-
     // Sync to backend if enabled
     if (backendIsEnabled()) {
       try {
         const userId = getBackendUserId();
         if (userId) {
+          // Set the daily goal for today
+          const today = getTodayKey();
+          await setDailyGoal(userId, today, personalizedGoalMl);
+
           // Update backend with all profile data including display name
           await updateBackendUser(userId, {
             displayName: displayName,
@@ -1099,12 +1089,12 @@ export default function Settings() {
             <CardHeader>
               <CardTitle>Daily Goal</CardTitle>
               <CardDescription>
-                Set a custom daily water goal or use our personalized recommendation
+                Set a manual daily water goal or use our personalized recommendation
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="manual-goal">Custom Goal (Liters)</Label>
+                <Label htmlFor="manual-goal"> Goal (Liters)</Label>
                 <Input
                   id="manual-goal"
                   type="number"
@@ -1116,7 +1106,7 @@ export default function Settings() {
                 />
               </div>
               <Button onClick={handleUpdateManualGoal} variant="outline" className="w-full">
-                Set Custom Goal
+                Set Goal
               </Button>
             </CardContent>
           </Card>
