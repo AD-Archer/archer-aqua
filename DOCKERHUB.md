@@ -2,6 +2,8 @@
 
 A modern, intelligent hydration tracking application with weather-based goal adjustments.
 
+![Archer Aqua Hero](https://aqua.adarcher.app/assets/hero-image-VCssyCnr.png)
+
 ## Features
 
 - 📊 **Personalized Hydration Goals**: Based on weight, age, activity level, and climate
