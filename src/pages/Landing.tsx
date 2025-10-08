@@ -4,7 +4,7 @@ import { SEO } from '@/components/SEO';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Droplet, Target, Trophy, TrendingUp, Activity, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import heroImage from '@/assets/hero-image.png';
+import heroImage from '@/assets/hero-image.webp';
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -59,6 +59,10 @@ export default function Landing() {
               src={heroImage} 
               alt="Hydration tracking visualization" 
               className="relative rounded-2xl shadow-elegant w-full"
+              loading="eager"
+              decoding="async"
+              width="600"
+              height="400"
             />
           </div>
         </div>

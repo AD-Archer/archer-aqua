@@ -3,13 +3,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { 
   RefreshCw, 
   AlertCircle, 
   Thermometer,
   Droplets,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  GlassWater,
+  Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -19,13 +27,15 @@ import {
   calculateWeatherMultiplier
 } from '@/lib/weather';
 import type { WeatherData } from '@/lib/weather';
-import { getTemperatureUnitPreference } from '@/lib/storage';
+import { getTemperatureUnitPreference, getDailyGoal } from '@/lib/storage';
 
 export function WeeklyWeatherView() {
   const [weeklyWeather, setWeeklyWeather] = useState<WeatherData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
+  const [selectedWeather, setSelectedWeather] = useState<WeatherData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const temperatureUnit = getTemperatureUnitPreference();
 
   const loadWeeklyWeather = async () => {
@@ -69,9 +79,21 @@ export function WeeklyWeatherView() {
     const isTomorrow = date.toDateString() === tomorrow.toDateString();
     
     if (isToday) return 'Today';
-    if (isTomorrow) return 'Tomorrow';
+    if (isTomorrow) return 'Tmr';
     
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  };
+
+  const getEstimatedGoal = (weather: WeatherData) => {
+    const baseGoal = getDailyGoal();
+    const multiplier = calculateWeatherMultiplier(weather);
+    const estimatedGoal = Math.round(baseGoal * multiplier);
+    return estimatedGoal;
+  };
+
+  const handleWeatherClick = (weather: WeatherData) => {
+    setSelectedWeather(weather);
+    setIsModalOpen(true);
   };
 
   if (error) {
@@ -107,7 +129,8 @@ export function WeeklyWeatherView() {
   }
 
   return (
-    <Card>
+    <>
+      <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -129,14 +152,16 @@ export function WeeklyWeatherView() {
           {weeklyWeather.map((weather, index) => {
             const adjustment = getHydrationAdjustment(weather);
             const climate = getClimateFromTemperature(weather.temperature);
+            const estimatedGoal = getEstimatedGoal(weather);
             
             return (
               <div
                 key={weather.date || index}
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors gap-2"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors gap-2 cursor-pointer"
+                onClick={() => handleWeatherClick(weather)}
               >
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="w-12 text-sm font-medium text-muted-foreground flex-shrink-0">
+                  <div className="w-14 text-sm font-medium text-muted-foreground flex-shrink-0">
                     {weather.date && formatDate(weather.date)}
                   </div>
                   <div className="flex items-center gap-2 min-w-0">
@@ -151,6 +176,12 @@ export function WeeklyWeatherView() {
                       {weather.humidity}%
                     </span>
                   </div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <GlassWater className="h-4 w-4 text-primary flex-shrink-0" />
+                    <span className="text-sm font-medium text-primary">
+                      {estimatedGoal}ml
+                    </span>
+                  </div>
                   <span className="text-sm text-muted-foreground capitalize hidden sm:inline">
                     {climate}
                   </span>
@@ -159,9 +190,12 @@ export function WeeklyWeatherView() {
                   <span className="text-sm text-muted-foreground capitalize sm:hidden">
                     {climate}
                   </span>
-                  <Badge variant={adjustment.variant}>
-                    {adjustment.text}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={adjustment.variant}>
+                      {adjustment.text}
+                    </Badge>
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
               </div>
             );
@@ -169,5 +203,89 @@ export function WeeklyWeatherView() {
         </div>
       </CardContent>
     </Card>
+
+    <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Thermometer className="h-5 w-5" />
+            {selectedWeather?.date && formatDate(selectedWeather.date)} Weather Details
+          </DialogTitle>
+        </DialogHeader>
+
+        {selectedWeather && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-2">
+                <Thermometer className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Temperature</p>
+                  <p className="font-semibold">{formatTemperature(selectedWeather.temperature, temperatureUnit)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Droplets className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Humidity</p>
+                  <p className="font-semibold">{selectedWeather.humidity}%</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <GlassWater className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Est. Goal</p>
+                  <p className="font-semibold">{getEstimatedGoal(selectedWeather)}ml</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div>
+                  <p className="text-sm text-muted-foreground">Climate</p>
+                  <p className="font-semibold capitalize">{getClimateFromTemperature(selectedWeather.temperature)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Hydration Adjustment</span>
+                <Badge variant={getHydrationAdjustment(selectedWeather).variant}>
+                  {getHydrationAdjustment(selectedWeather).text}
+                </Badge>
+              </div>
+            </div>
+
+            {selectedWeather.description && (
+              <div className="pt-2 border-t">
+                <p className="text-sm text-muted-foreground">Conditions</p>
+                <p className="font-medium capitalize">{selectedWeather.description}</p>
+              </div>
+            )}
+
+            {(selectedWeather.windSpeed || selectedWeather.precipitation !== undefined) && (
+              <div className="pt-2 border-t">
+                <div className="grid grid-cols-2 gap-4">
+                  {selectedWeather.windSpeed && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Wind Speed</p>
+                      <p className="font-semibold">{selectedWeather.windSpeed} km/h</p>
+                    </div>
+                  )}
+                  {selectedWeather.precipitation !== undefined && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Precipitation</p>
+                      <p className="font-semibold">{selectedWeather.precipitation} mm</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

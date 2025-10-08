@@ -21,6 +21,7 @@ const STORAGE_KEYS = {
   BACKEND_DRINK_MAP: 'archer_aqua_backend_drink_map',
   POLICIES_ACCEPTED_VERSION: 'archer_aqua_policies_version',
   POLICIES_ACCEPTED_AT: 'archer_aqua_policies_accepted_at',
+  PWA_INSTALL_DISMISSED_AT: 'archer_aqua_pwa_install_dismissed_at',
 };
 
 export const DEFAULT_GOAL = 2500; // 2.5L in ml
@@ -480,5 +481,31 @@ export function getProgressWheelStyle(): ProgressWheelStyle {
 
 export function saveProgressWheelStyle(style: ProgressWheelStyle): void {
   localStorage.setItem(STORAGE_KEYS.PROGRESS_WHEEL_STYLE, style);
+}
+
+// PWA Install Prompt
+export function getPWAInstallDismissedAt(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.PWA_INSTALL_DISMISSED_AT);
+}
+
+export function savePWAInstallDismissedAt(): void {
+  localStorage.setItem(STORAGE_KEYS.PWA_INSTALL_DISMISSED_AT, new Date().toISOString());
+}
+
+export function shouldShowPWAInstallPrompt(): boolean {
+  const dismissedAt = getPWAInstallDismissedAt();
+  if (!dismissedAt) return true;
+
+  const dismissedDate = new Date(dismissedAt);
+  const now = new Date();
+  const daysSinceDismissal = (now.getTime() - dismissedDate.getTime()) / (1000 * 60 * 60 * 24);
+
+  return daysSinceDismissal >= 3; // Show again after 3 days
+}
+
+export function isRunningAsPWA(): boolean {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         (window.navigator as { standalone?: boolean }).standalone === true ||
+         document.referrer.includes('android-app://');
 }
 
