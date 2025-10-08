@@ -361,6 +361,8 @@ export function useWaterTracking() {
 
     if (backendIsEnabled()) {
       try {
+        const today = getTodayKey();
+        await setDailyGoalToBackend(today, newGoal);
         await syncGoalToBackend(newGoal);
         await refreshBackendData(true);
       } catch (error) {
