@@ -1,0 +1,40 @@
+services:
+  app:
+    image: adarcher/archer-aqua:latest
+    container_name: archer-aqua
+    ports:
+      - "5173:8080"
+    env_file:
+      - .env
+    environment:
+      - PORT=${PORT}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=*
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED}
+    restart: unless-stopped
+
+  # postgres:
+  #   image: postgres:15
+  #   environment:
+  #     POSTGRES_DB: archer-aqua
+  #     POSTGRES_USER: archer_aqua_user
+  #     POSTGRES_PASSWORD: JPMrkHW2eNHZ4KGax5nK8yzUailA6dO58RXijdwN
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:

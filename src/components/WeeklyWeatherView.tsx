@@ -133,31 +133,36 @@ export function WeeklyWeatherView() {
             return (
               <div
                 key={weather.date || index}
-                className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors gap-2"
               >
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="w-12 text-sm font-medium text-muted-foreground">
+                  <div className="w-12 text-sm font-medium text-muted-foreground flex-shrink-0">
                     {weather.date && formatDate(weather.date)}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Thermometer className="h-4 w-4 text-primary" />
-                    <span className="font-semibold">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Thermometer className="h-4 w-4 text-primary flex-shrink-0" />
+                    <span className="font-semibold truncate">
                       {formatTemperature(weather.temperature, temperatureUnit)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Droplets className="h-4 w-4 text-primary" />
-                    <span className="text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Droplets className="h-4 w-4 text-primary flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate">
                       {weather.humidity}%
                     </span>
                   </div>
-                  <span className="text-sm text-muted-foreground capitalize">
+                  <span className="text-sm text-muted-foreground capitalize hidden sm:inline">
                     {climate}
                   </span>
                 </div>
-                <Badge variant={adjustment.variant} className="ml-auto">
-                  {adjustment.text}
-                </Badge>
+                <div className="flex items-center justify-between sm:justify-end gap-2">
+                  <span className="text-sm text-muted-foreground capitalize sm:hidden">
+                    {climate}
+                  </span>
+                  <Badge variant={adjustment.variant}>
+                    {adjustment.text}
+                  </Badge>
+                </div>
               </div>
             );
           })}

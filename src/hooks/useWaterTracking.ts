@@ -192,7 +192,63 @@ export function useWaterTracking() {
   }, []);
 
   const addDrink = useCallback(async (type: DrinkType, amount: number, customDrinkId?: string, date?: string) => {
-    if (backendIsEnabled()) {
+    const targetDate = date || getTodayKey();
+    const isToday = targetDate === getTodayKey();
+    
+    // Optimistically update local state and storage first
+    let multiplier = 1.0;
+    let label = resolveDrinkLabel(type);
+    
+    if (type === 'custom' && customDrinkId) {
+      const customDrink = getCustomDrinkById(customDrinkId);
+      multiplier = customDrink?.hydrationMultiplier || 1.0;
+      label = customDrink?.name || label;
+    } else if (type !== 'custom') {
+      multiplier = DRINK_HYDRATION_MULTIPLIERS[type];
+    }
+    
+    const hydrationValue = amount * multiplier;
+    
+    const optimisticDrink: Drink = {
+      id: `temp-${Date.now()}`,
+      type,
+      customDrinkId,
+      amount,
+      timestamp: new Date(),
+      hydrationValue,
+      label,
+      source: 'local',
+    };
+    
+    setTodayRecord((prevRecord) => {
+      if (!prevRecord || prevRecord.date !== targetDate) return prevRecord;
+      
+      const updatedRecord = {
+        ...prevRecord,
+        drinks: [...prevRecord.drinks, optimisticDrink],
+        totalHydration: prevRecord.totalHydration + hydrationValue,
+      };
+      
+      // Save optimistically to localStorage
+      saveDayRecord(updatedRecord);
+      return updatedRecord;
+    });
+    
+    setRecordsByDate((prev) => {
+      const existing = prev[targetDate];
+      if (!existing) return prev;
+      
+      const updated = {
+        ...existing,
+        drinks: [...existing.drinks, optimisticDrink],
+        totalHydration: existing.totalHydration + hydrationValue,
+      };
+      
+      return { ...prev, [targetDate]: updated };
+    });
+
+    try {
+      if (backendIsEnabled()) {
       const timezone = getTimezone();
       let consumedAt: string | undefined;
       if (date) {
@@ -263,62 +319,33 @@ export function useWaterTracking() {
       return;
     }
 
-    const targetDate = date || getTodayKey();
-    let record = getDayRecord(targetDate);
-    
-    if (!record) {
-      // Create a new record for this date if it doesn't exist
-      record = {
-        date: targetDate,
-        drinks: [],
-        totalHydration: 0,
-        goal: getDailyGoal(),
-      };
+    // Backend not enabled, just update stats locally
+    const record = getDayRecord(targetDate);
+    if (record) {
+      updateStats(record);
     }
-
-    let multiplier = 1.0;
-    let label = resolveDrinkLabel(type);
-
-    if (type === 'custom' && customDrinkId) {
-      const customDrink = getCustomDrinkById(customDrinkId);
-      multiplier = customDrink?.hydrationMultiplier || 1.0;
-      label = customDrink?.name || label;
-    } else if (type !== 'custom') {
-      multiplier = DRINK_HYDRATION_MULTIPLIERS[type];
+    } catch (error) {
+      console.error('Failed to add drink:', error);
+      
+      // Revert optimistic update on failure
+      if (isToday) {
+        const currentRecord = getDayRecord(targetDate);
+        if (currentRecord) {
+          // Remove the optimistic drink
+          const revertedRecord = {
+            ...currentRecord,
+            drinks: currentRecord.drinks.filter(d => d.id !== optimisticDrink.id),
+            totalHydration: currentRecord.totalHydration - hydrationValue,
+          };
+          setTodayRecord(revertedRecord);
+          saveDayRecord(revertedRecord);
+          setRecordsByDate((prev) => ({ ...prev, [targetDate]: revertedRecord }));
+        }
+      }
+      
+      throw error; // Re-throw to let UI handle error
     }
-    
-    const hydrationValue = amount * multiplier;
-
-    const newDrink: Drink = {
-      id: `${Date.now()}-${Math.random()}`,
-      type,
-      customDrinkId,
-      amount,
-      timestamp: new Date(),
-      hydrationValue,
-      label,
-      source: 'local',
-    };
-
-    const updatedDrinks = [...record.drinks, newDrink];
-    const totalHydration = updatedDrinks.reduce((sum, d) => sum + d.hydrationValue, 0);
-
-    const updatedRecord: DayRecord = {
-      ...record,
-      drinks: updatedDrinks,
-      totalHydration,
-    };
-
-    saveDayRecord(updatedRecord);
-    setRecordsByDate((prev) => ({ ...prev, [updatedRecord.date]: updatedRecord }));
-    
-    // Update todayRecord if we're adding to today
-    if (targetDate === getTodayKey()) {
-      const previousRecord = todayRecord;
-      setTodayRecord(updatedRecord);
-      updateStats(updatedRecord, previousRecord);
-    }
-  }, [todayRecord, updateStats]);
+  }, [updateStats]);
 
   const updateGoal = useCallback(async (newGoal: number) => {
     setGoal(newGoal);

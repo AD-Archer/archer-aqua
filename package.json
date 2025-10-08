@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "start-backend": "cd backend && go run cmd/server/main.go",
-    "start:prod": "pnpm build && concurrently \"vite preview\" \"pnpm:start-backend\" --names \"frontend,backend\" --prefix-colors \"cyan,magenta\""
+    "start": "pnpm build && concurrently \"vite preview\" \"pnpm:start-backend\" --names \"frontend,backend\" --prefix-colors \"cyan,magenta\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

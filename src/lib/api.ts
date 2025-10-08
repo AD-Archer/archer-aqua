@@ -1,7 +1,7 @@
 import type { DrinkType } from '@/types/water';
 import { clearAuthToken, getAuthToken } from './storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
@@ -16,10 +16,6 @@ interface RequestOptions extends RequestInit {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured. Set VITE_API_BASE_URL in your environment.');
-  }
-
   const { skipAuth = false, ...fetchOptions } = options;
 
   const headers = new Headers(fetchOptions.headers);
@@ -48,17 +44,31 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const contentType = response.headers.get('Content-Type');
   const isJSON = contentType?.includes('application/json');
-  const data = isJSON ? await response.json() : await response.text();
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      clearAuthToken();
+    let errorMessage = `HTTP ${response.status}`;
+    if (isJSON) {
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        // Ignore JSON parsing errors
+      }
+    } else {
+      try {
+        errorMessage = await response.text() || errorMessage;
+      } catch {
+        // Ignore text parsing errors
+      }
     }
-    const message = isJSON && data?.error ? data.error : response.statusText || 'Unknown error';
-    throw new Error(message);
+    throw new Error(errorMessage);
   }
 
-  return data as T;
+  if (isJSON) {
+    return response.json();
+  }
+
+  return response.text() as T;
 }
 
 export interface ApiLocationPayload {
@@ -351,8 +361,7 @@ export interface CreateWeatherPayload {
 }
 
 export const apiConfig = {
-  isEnabled: Boolean(API_BASE_URL),
-  baseUrl: API_BASE_URL,
+  isEnabled: !!API_BASE_URL,
 };
 
 export async function createUser(payload: CreateUserPayload) {
@@ -493,20 +502,11 @@ export async function registerUser(payload: RegisterPayload) {
 }
 
 export async function loginUser(payload: LoginPayload): Promise<ApiAuthResponse | ApiTwoFactorRequiredResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  return request<ApiAuthResponse | ApiTwoFactorRequiredResponse>('/api/auth/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(payload),
+    skipAuth: true,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP ${response.status}`);
-  }
-
-  return response.json();
 }
 
 export async function getAuthState() {
@@ -610,4 +610,16 @@ export async function disable2FA(userId: string, payload: Disable2FAPayload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+// Health Check
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/healthz`, {
+      method: 'GET',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useWaterTracking } from '@/hooks/useWaterTracking';
 import { SEO } from '@/components/SEO';
 import { CircularProgress } from '@/components/CircularProgress';
@@ -17,7 +17,7 @@ import { isAuthenticated, getUnitPreference, getCustomDrinkById, getCustomDrinkB
 import { format, parseISO } from 'date-fns';
 import { getDrinkIcon } from '@/lib/iconMap';
 import { backendIsEnabled } from '@/lib/backend';
-import { getAuthState } from '@/lib/api';
+import { getAuthState, checkHealth } from '@/lib/api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +33,7 @@ import { AchievementCard } from '@/components/AchievementCard';
 
 const Index = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink, loadRecordForDate, recordsByDate, isLoading: isDataLoading } = useWaterTracking();
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
   const [todayKey, setTodayKey] = useState(getTodayKey());
@@ -40,12 +41,13 @@ const Index = () => {
   const [selectedRecord, setSelectedRecord] = useState<DayRecord | null>(todayRecord ?? null);
   const [isRecordLoading, setIsRecordLoading] = useState(false);
   const [currentTab, setCurrentTab] = useState('today');
-  const [showWeather, setShowWeather] = useState(getUseWeatherAdjustment());
   const [progressWheelStyle, setProgressWheelStyle] = useState(getProgressWheelStyle());
   const [isCheckingProfile, setIsCheckingProfile] = useState(true);
   const [showPolicyDialog, setShowPolicyDialog] = useState(false);
   const [requiresPrivacy, setRequiresPrivacy] = useState(false);
   const [requiresTerms, setRequiresTerms] = useState(false);
+  const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
+  const [showLoading, setShowLoading] = useState(true);
 
   // Get all drinks for today
   const allDrinks = todayRecord?.drinks || [];
@@ -148,6 +150,18 @@ const Index = () => {
 
     checkAuthAndProfile();
   }, [navigate]);
+
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      if (backendIsEnabled()) {
+        const healthy = await checkHealth();
+        setBackendHealthy(healthy);
+      } else {
+        setBackendHealthy(false);
+      }
+    };
+    checkBackendHealth();
+  }, []);
 
   const handleQuickAdd = async (amount: number) => {
     try {
@@ -272,7 +286,22 @@ const Index = () => {
   })();
 
   // Show loading state while checking profile or loading data
-  if (isCheckingProfile || isDataLoading) {
+  useEffect(() => {
+    setShowLoading(true);
+    const timer = setTimeout(() => {
+      setShowLoading(false);
+    }, 300); // Show loading for at least 300ms
+
+    return () => clearTimeout(timer);
+  }, [location.pathname]); // Reset loading on navigation
+
+  useEffect(() => {
+    if (backendHealthy === false) {
+      toast.error('Backend is not running. App is running in local mode.');
+    }
+  }, [backendHealthy]);
+
+  if (isCheckingProfile || isDataLoading || showLoading) {
     return (
       <>
         <SEO 
