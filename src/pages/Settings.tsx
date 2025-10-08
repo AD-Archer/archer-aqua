@@ -309,24 +309,12 @@ export default function Settings() {
     saveTemperatureUnitPreference(temperatureUnit);
     saveTimezone(timezone);
 
-    let personalizedGoalMl: number | null = null;
-    let customGoalLiters: number | null = null;
-
-    if (usePersonalizedGoal) {
-      personalizedGoalMl = calculatePersonalizedGoal(profile, useWeatherAdjustment);
-      saveDailyGoal(personalizedGoalMl);
-      setManualGoal((personalizedGoalMl / 1000).toFixed(1));
-      saveGoalMode('personalized');
-    } else {
-      const manualGoalValue = parseFloat(manualGoal);
-      if (Number.isNaN(manualGoalValue) || manualGoalValue < 0.5 || manualGoalValue > 10) {
-        toast.error('Please enter a valid custom goal (0.5 - 10L)');
-        return;
-      }
-      customGoalLiters = manualGoalValue;
-      saveDailyGoal(customGoalLiters * 1000);
-      saveGoalMode('custom');
-    }
+    // Always recalculate personalized goal and reset to personalized mode
+    const personalizedGoalMl = calculatePersonalizedGoal(profile, useWeatherAdjustment);
+    saveDailyGoal(personalizedGoalMl);
+    setManualGoal((personalizedGoalMl / 1000).toFixed(1));
+    setUsePersonalizedGoal(true);
+    saveGoalMode('personalized');
 
     // Sync to backend if enabled
     if (backendIsEnabled()) {
@@ -348,7 +336,7 @@ export default function Settings() {
             temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
             progressWheelStyle: progressWheelStyle.replace('-', '_'),
             weatherAdjustmentsEnabled: useWeatherAdjustment,
-            customGoalLiters: customGoalLiters,
+            customGoalLiters: null, // Reset to personalized goal
           });
         }
         await syncProfileToBackend();
@@ -358,14 +346,8 @@ export default function Settings() {
         toast.warning('Profile updated locally, but failed to sync with server');
       }
     } else {
-      const goalLitersForMessage = usePersonalizedGoal
-        ? (personalizedGoalMl ?? 0) / 1000
-        : customGoalLiters;
-      toast.success(
-        goalLitersForMessage
-          ? `Profile updated! Daily goal: ${goalLitersForMessage.toFixed(1)}L`
-          : 'Profile updated!'
-      );
+      const goalLitersForMessage = personalizedGoalMl / 1000;
+      toast.success(`Profile updated! Daily goal: ${goalLitersForMessage.toFixed(1)}L`);
     }
   };
 

@@ -94,6 +94,85 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/4e7f2d06-a668-40e8-9cbe-8acc3d732831) and click on Share -> Publish.
 
+## Docker Deployment
+
+This application can be deployed using Docker and Docker Compose. The Docker images are available on Docker Hub.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- A PostgreSQL database (can be run separately or use the commented service in docker-compose.yml)
+
+### Quick Start with Docker
+
+1. Create a directory for deployment:
+   ```sh
+   mkdir archer-aqua-deploy
+   cd archer-aqua-deploy
+   ```
+
+2. Download the docker-compose.yml and .env files:
+   ```sh
+   # Download from your repository or copy them
+   wget https://raw.githubusercontent.com/AD-Archer/archer-aqua/main/docker-compose.yml
+   wget https://raw.githubusercontent.com/AD-Archer/archer-aqua/main/.env
+   ```
+
+3. Edit the `.env` file with your production values (database URL, secrets, etc.)
+
+4. Run the application:
+   ```sh
+   docker compose up -d
+   ```
+
+   The application will be available at http://localhost (both frontend and API)
+
+### Using External PostgreSQL
+
+The docker-compose.yml includes a commented PostgreSQL service. For production, use an external PostgreSQL database and update the `DATABASE_URL` in your `.env` file.
+
+# Uncomment the postgres service in docker-compose.yml if you want to run it locally:
+# postgres:
+#   image: postgres:15
+#   environment:
+#     POSTGRES_DB: archer-aqua
+#     POSTGRES_USER: archer_aqua_user
+#     POSTGRES_PASSWORD: JPMrkHW2eNHZ4KGax5nK8yzUailA6dO58RXijdwN
+#   ports:
+#     - "5432:5432"
+#   volumes:
+#     - postgres_data:/var/lib/postgresql/data
+#   restart: unless-stopped
+
+# volumes:
+#   postgres_data:
+
+### Environment Variables
+
+Make sure to set the following environment variables in your `.env` file:
+
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for OAuth
+- `DATABASE_URL` for PostgreSQL connection
+- `JWT_SECRET` for session management
+- SMTP settings for email functionality
+
+### Development
+
+For development, clone the repository and use the development scripts:
+
+```sh
+git clone https://github.com/AD-Archer/archer-aqua.git
+cd archer-aqua
+pnpm install
+pnpm run dev
+```
+
+### CI/CD
+
+The project includes GitHub Actions workflow that automatically builds and pushes a single Docker image to Docker Hub on pushes to the main branch.
+
+Image available at: `adarcher/archer-aqua`
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!

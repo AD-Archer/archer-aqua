@@ -1,6 +1,6 @@
 module github.com/AD-Archer/archer-aqua/backend
 
-go 1.24.0
+go 1.23.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.3
@@ -11,7 +11,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pquerna/otp v1.5.0
 	golang.org/x/crypto v0.31.0
-	golang.org/x/oauth2 v0.31.0
+	golang.org/x/oauth2 v0.23.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.0

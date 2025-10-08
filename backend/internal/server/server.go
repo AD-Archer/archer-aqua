@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"os"
 	"time"
 
 	"log/slog"
@@ -138,5 +139,18 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 				r.Post("/disable-2fa", api.Disable2FA)
 			})
 		})
+	})
+
+	// Serve static files for all other routes (SPA fallback)
+	fileServer := http.FileServer(http.Dir("./static"))
+	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
+		// Check if file exists, if not serve index.html for SPA routing
+		if req.URL.Path != "/" {
+			if _, err := os.Stat("./static" + req.URL.Path); os.IsNotExist(err) {
+				// Serve index.html for client-side routing
+				req.URL.Path = "/"
+			}
+		}
+		fileServer.ServeHTTP(w, req)
 	})
 }
