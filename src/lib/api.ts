@@ -473,6 +473,25 @@ export async function getAllTimeStats(userId: string, timezone: string) {
   return request<ApiHydrationStatsResponse>(`/api/users/${userId}/hydration/summary?${params.toString()}`);
 }
 
+export async function getDailyGoal(userId: string, date: string) {
+  const params = new URLSearchParams({ date });
+  return request<{ goalMl: number }>(`/api/users/${userId}/hydration/goals/daily?${params.toString()}`);
+}
+
+export async function setDailyGoal(userId: string, date: string, goalMl: number) {
+  return request<{ id: string; userId: string; date: string; goalMl: number }>(`/api/users/${userId}/hydration/goals/daily`, {
+    method: 'POST',
+    body: JSON.stringify({ date, goalMl }),
+  });
+}
+
+export async function deleteDailyGoal(userId: string, date: string) {
+  const params = new URLSearchParams({ date });
+  return request<void>(`/api/users/${userId}/hydration/goals/daily?${params.toString()}`, {
+    method: 'DELETE',
+  });
+}
+
 export function resolveDrinkLabel(type: DrinkType): string {
   const labels: Record<DrinkType, string> = {
     water: 'Water',

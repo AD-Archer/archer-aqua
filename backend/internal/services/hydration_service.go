@@ -17,11 +17,15 @@ import (
 
 // HydrationService manages hydration logs, summaries, and streaks.
 type HydrationService struct {
-	db *gorm.DB
+	db           *gorm.DB
+	dailyGoalSvc *DailyGoalService
 }
 
-func NewHydrationService(db *gorm.DB) *HydrationService {
-	return &HydrationService{db: db}
+func NewHydrationService(db *gorm.DB, dailyGoalSvc *DailyGoalService) *HydrationService {
+	return &HydrationService{
+		db:           db,
+		dailyGoalSvc: dailyGoalSvc,
+	}
 }
 
 var ErrHydrationLogNotFound = errors.New("hydration log not found")
@@ -147,9 +151,9 @@ func (s *HydrationService) DailySummary(ctx context.Context, userID uuid.UUID, d
 		responses = append(responses, dto.NewHydrationLogResponse(logEntry))
 	}
 
-	goalMl := user.DailyGoalLiters * 1000
-	if goalMl == 0 {
-		goalMl = 2000
+	goalMl, err := s.dailyGoalSvc.GetDailyGoal(ctx, userID, dateKey)
+	if err != nil {
+		return nil, fmt.Errorf("get daily goal: %w", err)
 	}
 
 	progress := 0.0
@@ -211,15 +215,26 @@ func (s *HydrationService) WeeklyStats(ctx context.Context, userID uuid.UUID, ti
 	totalVolume := 0.0
 	totalEffective := 0.0
 
-	goalMl := user.DailyGoalLiters * 1000
-	if goalMl == 0 {
-		goalMl = 2000
+	// Get daily goals for the date range
+	startDateKey := startRange.Format("2006-01-02")
+	endDateKey := now.Format("2006-01-02")
+	dailyGoals, err := s.dailyGoalSvc.GetDailyGoals(ctx, userID, startDateKey, endDateKey)
+	if err != nil {
+		return nil, fmt.Errorf("get daily goals: %w", err)
 	}
 
 	for _, logEntry := range logs {
 		key := utils.DailyKey(logEntry.ConsumedAtLocal, loc)
 		summary, exists := summaries[key]
 		if !exists {
+			goalMl, exists := dailyGoals[key]
+			if !exists {
+				// Use default goal if no specific goal set
+				goalMl = user.DailyGoalLiters * 1000
+				if goalMl == 0 {
+					goalMl = 2000
+				}
+			}
 			summary = &dto.DailySummaryResponse{
 				Date:         key,
 				Timezone:     loc.String(),
@@ -243,6 +258,14 @@ func (s *HydrationService) WeeklyStats(ctx context.Context, userID uuid.UUID, ti
 		key := date.Format("2006-01-02")
 		summary, exists := summaries[key]
 		if !exists {
+			goalMl, exists := dailyGoals[key]
+			if !exists {
+				// Use default goal if no specific goal set
+				goalMl = user.DailyGoalLiters * 1000
+				if goalMl == 0 {
+					goalMl = 2000
+				}
+			}
 			summary = &dto.DailySummaryResponse{
 				Date:         key,
 				Timezone:     loc.String(),

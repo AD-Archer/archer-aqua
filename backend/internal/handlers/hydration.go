@@ -131,3 +131,119 @@ func (api *API) DeleteHydrationLog(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (api *API) SetDailyGoal(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	var request dto.SetDailyGoalRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	// Validate date format
+	if _, err := time.Parse(time.DateOnly, request.Date); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid date format (expected YYYY-MM-DD)")
+		return
+	}
+
+	// Validate goal
+	if request.GoalMl <= 0 {
+		respondError(w, http.StatusBadRequest, "goal must be greater than 0")
+		return
+	}
+
+	dailyGoal, err := api.dailyGoals.SetDailyGoal(r.Context(), userID, request.Date, request.GoalMl)
+	if err != nil {
+		logError(api.logger, "set daily goal", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	response := dto.DailyGoalResponse{
+		ID:     dailyGoal.ID.String(),
+		UserID: dailyGoal.UserID.String(),
+		Date:   dailyGoal.Date,
+		GoalMl: dailyGoal.GoalMl,
+	}
+
+	respondJSON(w, http.StatusOK, response)
+}
+
+func (api *API) GetDailyGoal(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	dateStr := r.URL.Query().Get("date")
+	if dateStr == "" {
+		respondError(w, http.StatusBadRequest, "date query parameter is required")
+		return
+	}
+
+	// Validate date format
+	if _, err := time.Parse(time.DateOnly, dateStr); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid date format (expected YYYY-MM-DD)")
+		return
+	}
+
+	goalMl, err := api.dailyGoals.GetDailyGoal(r.Context(), userID, dateStr)
+	if err != nil {
+		logError(api.logger, "get daily goal", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	response := map[string]float64{"goalMl": goalMl}
+	respondJSON(w, http.StatusOK, response)
+}
+
+func (api *API) DeleteDailyGoal(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUIDParam(r, "userID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if !api.authorizeUserRequest(w, r, userID) {
+		return
+	}
+
+	dateStr := r.URL.Query().Get("date")
+	if dateStr == "" {
+		respondError(w, http.StatusBadRequest, "date query parameter is required")
+		return
+	}
+
+	// Validate date format
+	if _, err := time.Parse(time.DateOnly, dateStr); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid date format (expected YYYY-MM-DD)")
+		return
+	}
+
+	if err := api.dailyGoals.DeleteDailyGoal(r.Context(), userID, dateStr); err != nil {
+		logError(api.logger, "delete daily goal", err)
+		status := http.StatusInternalServerError
+		if errors.Is(err, services.ErrDailyGoalNotFound) {
+			status = http.StatusNotFound
+		}
+		respondError(w, status, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

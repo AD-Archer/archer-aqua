@@ -29,7 +29,7 @@ services:
   #   environment:
   #     POSTGRES_DB: archer-aqua
   #     POSTGRES_USER: archer_aqua_user
-  #     POSTGRES_PASSWORD: JPMrkHW2eNHZ4KGax5nK8yzUailA6dO58RXijdwN
+  #     POSTGRES_PASSWORD: archer_aqua_password
   #   ports:
   #     - "5432:5432"
   #   volumes:

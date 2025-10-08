@@ -7,6 +7,8 @@ import {
   deleteHydrationLog,
   updateUser,
   listDrinks,
+  getDailyGoal as getDailyGoalApi,
+  setDailyGoal as setDailyGoalApi,
   type ApiDailySummaryResponse,
   type ApiHydrationLogResponse,
   type ApiHydrationStatsResponse,
@@ -192,6 +194,36 @@ export async function syncGoalToBackend(goalMl: number): Promise<void> {
   await updateUser(userId, {
     customGoalLiters: goalMl / 1000,
   });
+}
+
+export async function setDailyGoalToBackend(date: string, goalMl: number): Promise<void> {
+  if (!backendIsEnabled()) {
+    return;
+  }
+  const userId = await ensureBackendUser();
+  if (!userId) {
+    return;
+  }
+
+  await setDailyGoalApi(userId, date, goalMl);
+}
+
+export async function getDailyGoalFromBackend(date: string): Promise<number | null> {
+  if (!backendIsEnabled()) {
+    return null;
+  }
+  const userId = await ensureBackendUser();
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    const response = await getDailyGoalApi(userId, date);
+    return response.goalMl;
+  } catch (error) {
+    console.warn('Failed to get daily goal from backend', error);
+    return null;
+  }
 }
 
 export async function logHydrationToBackend(

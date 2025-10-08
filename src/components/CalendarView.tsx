@@ -1,8 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, Plus, CheckCircle2, Circle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Trash2, Plus, CheckCircle2, Circle, Target } from 'lucide-react';
 import { getCustomDrinkById, getCustomDrinkByLabel } from '@/lib/storage';
 import { DrinkType, DRINK_COLORS, formatVolume, VolumeUnit, Drink, DayRecord, DailyHydrationSummary } from '@/types/water';
 import { format, parseISO } from 'date-fns';
@@ -18,6 +20,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { AddDrinkDialog } from './AddDrinkDialog';
 
 interface CalendarViewProps {
   unitPreference: VolumeUnit;
@@ -28,8 +40,9 @@ interface CalendarViewProps {
   recordsByDate?: Record<string, DayRecord>;
   isLoading?: boolean;
   onRemoveDrink: (drinkId: string, date: string) => void | Promise<void>;
-  onAddDrink: () => void;
+    onAddDrink: (type: DrinkType, amount: number, customDrinkId?: string, date?: string) => void | Promise<void>;
   onDateSelect: (date: Date) => void | Promise<void>;
+  onSetDailyGoal?: (date: string, goalMl: number) => void | Promise<void>;
 }
 
 export function CalendarView({
@@ -43,10 +56,20 @@ export function CalendarView({
   onRemoveDrink,
   onAddDrink,
   onDateSelect,
+  onSetDailyGoal,
 }: CalendarViewProps) {
   const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
   const isToday = selectedDateString === todayKey;
   const isFutureDate = selectedDate > new Date();
+
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [customGoal, setCustomGoal] = useState('');
+  const [addDrinkDialogOpen, setAddDrinkDialogOpen] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(selectedDate);
+
+  useEffect(() => {
+    setCurrentMonth(selectedDate);
+  }, [selectedDate]);
 
   const historyMap = useMemo(() => {
     const map = new Map<string, DailyHydrationSummary>();
@@ -107,7 +130,9 @@ export function CalendarView({
 
   const handleTodayClick = () => {
     const today = parseISO(todayKey);
-    void onDateSelect(Number.isNaN(today.getTime()) ? new Date() : today);
+    const todayDate = Number.isNaN(today.getTime()) ? new Date() : today;
+    setCurrentMonth(todayDate);
+    void onDateSelect(todayDate);
   };
 
   const drinks = displayRecord?.drinks ?? [];
@@ -125,11 +150,9 @@ export function CalendarView({
                 View and manage your hydration for any date
               </CardDescription>
             </div>
-            {!isToday && (
-              <Button onClick={handleTodayClick} size="sm" variant="outline">
-                Jump to Today
-              </Button>
-            )}
+            <Button onClick={handleTodayClick} size="sm" variant="outline">
+              Jump to Today
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="flex justify-center">
@@ -137,6 +160,8 @@ export function CalendarView({
             mode="single"
             selected={selectedDate}
             onSelect={handleDateSelect}
+            month={currentMonth}
+            onMonthChange={setCurrentMonth}
             className="rounded-md border"
             modifiers={calendarModifiers}
             modifiersClassNames={{
@@ -190,10 +215,61 @@ export function CalendarView({
                 {displayRecord ? `${drinks.length} drink${drinks.length !== 1 ? 's' : ''} • ${formatVolume(totalHydration, unitPreference)} hydration` : 'No drinks recorded'}
               </CardDescription>
             </div>
-            <Button onClick={onAddDrink} size="sm" variant="outline">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Drink
-            </Button>
+            <div className="flex gap-2">
+              {onSetDailyGoal && (
+                <Dialog open={goalDialogOpen} onOpenChange={setGoalDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Target className="h-4 w-4 mr-2" />
+                      Set Goal
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Set Daily Goal</DialogTitle>
+                      <DialogDescription>
+                        Set a custom hydration goal for {format(selectedDate, 'MMMM d, yyyy')}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="goal" className="text-right">
+                          Goal (L)
+                        </Label>
+                        <Input
+                          id="goal"
+                          type="number"
+                          step="0.1"
+                          value={customGoal}
+                          onChange={(e) => setCustomGoal(e.target.value)}
+                          className="col-span-3"
+                          placeholder="2.5"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        onClick={async () => {
+                          const goalLiters = parseFloat(customGoal);
+                          if (!isNaN(goalLiters) && goalLiters > 0) {
+                            await onSetDailyGoal(selectedDateString, Math.round(goalLiters * 1000));
+                            setGoalDialogOpen(false);
+                            setCustomGoal('');
+                          }
+                        }}
+                        disabled={!customGoal || isNaN(parseFloat(customGoal)) || parseFloat(customGoal) <= 0}
+                      >
+                        Set Goal
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+              <Button onClick={() => setAddDrinkDialogOpen(true)} size="sm" variant="outline">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Drink
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -329,6 +405,15 @@ export function CalendarView({
           </CardContent>
         </Card>
       )}
+
+      <AddDrinkDialog
+        open={addDrinkDialogOpen}
+        onOpenChange={setAddDrinkDialogOpen}
+        onAddDrink={async (type, amount, customDrinkId) => {
+          await onAddDrink(type, amount, customDrinkId, selectedDateString);
+          setAddDrinkDialogOpen(false);
+        }}
+      />
     </div>
   );
 }

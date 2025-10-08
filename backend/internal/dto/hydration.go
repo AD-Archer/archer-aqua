@@ -45,6 +45,18 @@ type DailySummaryResponse struct {
 	Logs               []HydrationLogResponse `json:"logs"`
 }
 
+type SetDailyGoalRequest struct {
+	Date   string  `json:"date"`
+	GoalMl float64 `json:"goalMl"`
+}
+
+type DailyGoalResponse struct {
+	ID     string  `json:"id"`
+	UserID string  `json:"userId"`
+	Date   string  `json:"date"`
+	GoalMl float64 `json:"goalMl"`
+}
+
 type HydrationStatsResponse struct {
 	UserID           uuid.UUID              `json:"userId"`
 	Timezone         string                 `json:"timezone"`

@@ -19,6 +19,7 @@ import {
   mapBackendStatsToUserStats,
   removeHydrationLogFromBackend,
   syncGoalToBackend,
+  setDailyGoalToBackend,
   syncCustomDrinksFromBackend,
 } from '@/lib/backend';
 import { resolveDrinkLabel } from '@/lib/api';
@@ -368,6 +369,31 @@ export function useWaterTracking() {
     }
   }, [todayRecord, refreshBackendData]);
 
+  const setDailyGoal = useCallback(async (date: string, goalMl: number) => {
+    // Update local record if it exists
+    const existingRecord = recordsByDate[date] ?? getDayRecord(date);
+    if (existingRecord) {
+      const updatedRecord = { ...existingRecord, goal: goalMl };
+      saveDayRecord(updatedRecord);
+      setRecordsByDate((prev) => ({ ...prev, [date]: updatedRecord }));
+      if (date === getTodayKey()) {
+        setTodayRecord(updatedRecord);
+        setGoal(goalMl);
+      }
+    }
+
+    // Sync with backend
+    if (backendIsEnabled()) {
+      try {
+        await setDailyGoalToBackend(date, goalMl);
+        // Refresh backend data to get updated summaries
+        await refreshBackendData(true);
+      } catch (error) {
+        console.warn('Failed to sync daily goal with backend', error);
+      }
+    }
+  }, [recordsByDate, refreshBackendData]);
+
   const removeDrink = useCallback(async (drinkId: string, date?: string): Promise<DayRecord | null> => {
     const targetDate = date || getTodayKey();
     const currentRecord = recordsByDate[targetDate]
@@ -494,6 +520,7 @@ export function useWaterTracking() {
     goal,
     addDrink,
     updateGoal,
+    setDailyGoal,
     removeDrink,
     loadRecordForDate,
     recordsByDate,
