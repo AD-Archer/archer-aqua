@@ -383,6 +383,9 @@ export default function Settings() {
       try {
         const userId = getBackendUserId();
         if (userId) {
+          // Set the daily goal for today to ensure consistency
+          const today = getTodayKey();
+          await setDailyGoal(userId, today, goalInMl);
           await updateBackendUser(userId, { customGoalLiters: manualGoalValue });
         }
       } catch (error) {
