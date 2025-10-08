@@ -1,9 +1,6 @@
 # Build frontend
 FROM node:18-alpine AS frontend-builder
 
-ARG VITE_API_BASE_URL=http://localhost:3000
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
 WORKDIR /frontend
 
 # Copy package files
@@ -35,7 +32,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 

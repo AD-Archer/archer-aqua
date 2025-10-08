@@ -1,7 +1,7 @@
 import type { DrinkType } from '@/types/water';
 import { clearAuthToken, getAuthToken } from './storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
