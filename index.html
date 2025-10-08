@@ -24,8 +24,8 @@
     <meta property="og:site_name" content="Archer Aqua" />
     <meta property="og:title" content="Archer Aqua | Water Tracking & Hydration App" />
     <meta property="og:description" content="Hydration app by Antonio Archer. Track your daily water intake, unlock achievements, monitor weather-based hydration needs, and stay healthy with intelligent insights." />
-    <meta property="og:image" content="https://aqua.adarcher.app/banner.png" />
-    <meta property="og:image:secure_url" content="https://aqua.adarcher.app/banner.png" />
+    <meta property="og:image" content="https://aqua.adarcher.app/banner.webp" />
+    <meta property="og:image:secure_url" content="https://aqua.adarcher.app/banner.webp" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Archer Aqua - Hydrate. Track. Thrive." />
@@ -36,7 +36,7 @@
     <meta name="twitter:url" content="https://aqua.adarcher.app" />
     <meta name="twitter:title" content="Archer Aqua | Water Tracking & Hydration App" />
     <meta name="twitter:description" content="Hydration app by Antonio Archer, a software developer from Philadelphia. Track your daily water intake, unlock achievements, and stay healthy with intelligent insights." />
-    <meta name="twitter:image" content="https://aqua.adarcher.app/banner.png" />
+    <meta name="twitter:image" content="https://aqua.adarcher.app/banner.webp" />
     <meta name="twitter:creator" content="@ad_archer_" />
     <meta name="twitter:site" content="@ad_archer_" />
     
@@ -54,6 +54,25 @@
     <meta name="apple-mobile-web-app-title" content="Archer Aqua" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="format-detection" content="telephone=no, email=no, address=no" />
+    
+    <!-- Performance Optimizations -->
+    <link rel="preload" href="/assets/hero-image.webp" as="image" type="image/webp">
+    <link rel="dns-prefetch" href="//fonts.googleapis.com">
+    <link rel="dns-prefetch" href="//fonts.gstatic.com">
+    <link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
+    
+    <!-- Critical CSS for above-the-fold content -->
+    <style>
+      /* Critical styles for initial render */
+      body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+      .min-h-screen { min-height: 100vh; }
+      .bg-gradient-sky { background: linear-gradient(180deg, hsl(194 53% 95%), hsl(180 45% 88%)); }
+      .flex { display: flex; }
+      .items-center { align-items: center; }
+      .justify-center { justify-content: center; }
+      .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    </style>
     
     <!-- Structured Data / JSON-LD for SEO -->
     <script type="application/ld+json">
