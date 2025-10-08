@@ -5,12 +5,16 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { Droplet, Target, Trophy, TrendingUp, Activity, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import heroImage from '@/assets/hero-image.webp';
+import { Helmet } from 'react-helmet-async';
 
 export default function Landing() {
   const navigate = useNavigate();
 
   return (
     <>
+      <Helmet>
+        <link rel="preload" href="/assets/hero-image.webp" as="image" type="image/webp" />
+      </Helmet>
       <SEO />
       <div className="min-h-screen bg-gradient-sky">
       {/* Hero Section */}
