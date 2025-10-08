@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, Copy, Download, UserX, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId, setCustomDrinksList, getGoalMode, saveGoalMode } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId, setCustomDrinksList, getGoalMode, saveGoalMode, getTodayKey } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius, ProgressWheelStyle } from '@/types/water';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
@@ -37,6 +37,7 @@ import {
   disable2FA,
   deleteUserAccount,
   exportUserData,
+  setDailyGoal,
 } from '@/lib/api';
 import { getLocationPreference } from '@/lib/weather';
 
@@ -315,6 +316,20 @@ export default function Settings() {
     setManualGoal((personalizedGoalMl / 1000).toFixed(1));
     setUsePersonalizedGoal(true);
     saveGoalMode('personalized');
+
+    // Set the daily goal for today
+    const today = getTodayKey();
+    if (backendIsEnabled() && isAuthenticated()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          await setDailyGoal(userId, today, personalizedGoalMl);
+        }
+      } catch (error) {
+        console.warn('Failed to set daily goal for today', error);
+        // Don't fail the whole operation if this fails
+      }
+    }
 
     // Sync to backend if enabled
     if (backendIsEnabled()) {
