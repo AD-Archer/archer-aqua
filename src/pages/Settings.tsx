@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Droplet, ArrowLeft, LogOut, Plus, Trash2, GlassWater, Pencil, Copy, Download, UserX, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
-import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId, setCustomDrinksList, getGoalMode, saveGoalMode } from '@/lib/storage';
+import { saveUserProfile, getUserProfile, calculatePersonalizedGoal, calculatePersonalizedGoalForDate, saveDailyGoal, getDailyGoal, logout, isAuthenticated, getUser, getUnitPreference, saveUnitPreference, getCustomDrinks, getWeightUnitPreference, saveWeightUnitPreference, getTemperatureUnitPreference, saveTemperatureUnitPreference, getTimezone, saveTimezone, getUseWeatherAdjustment, saveUseWeatherAdjustment, getAllDayRecords, saveDayRecord, getProgressWheelStyle, saveProgressWheelStyle, getBackendUserId, setCustomDrinksList, getGoalMode, saveGoalMode, getTodayKey } from '@/lib/storage';
 import { Gender, ActivityLevel, UserProfile, VolumeUnit, CustomDrinkType, WeightUnit, kgToLbs, lbsToKg, TemperatureUnit, celsiusToFahrenheit, fahrenheitToCelsius, ProgressWheelStyle } from '@/types/water';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
@@ -37,6 +37,7 @@ import {
   disable2FA,
   deleteUserAccount,
   exportUserData,
+  setDailyGoal,
 } from '@/lib/api';
 import { getLocationPreference } from '@/lib/weather';
 
@@ -321,6 +322,10 @@ export default function Settings() {
       try {
         const userId = getBackendUserId();
         if (userId) {
+          // Set the daily goal for today
+          const today = getTodayKey();
+          await setDailyGoal(userId, today, personalizedGoalMl);
+
           // Update backend with all profile data including display name
           await updateBackendUser(userId, {
             displayName: displayName,
@@ -1084,12 +1089,12 @@ export default function Settings() {
             <CardHeader>
               <CardTitle>Daily Goal</CardTitle>
               <CardDescription>
-                Set a custom daily water goal or use our personalized recommendation
+                Set a manual daily water goal or use our personalized recommendation
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="manual-goal">Custom Goal (Liters)</Label>
+                <Label htmlFor="manual-goal"> Goal (Liters)</Label>
                 <Input
                   id="manual-goal"
                   type="number"
@@ -1101,7 +1106,7 @@ export default function Settings() {
                 />
               </div>
               <Button onClick={handleUpdateManualGoal} variant="outline" className="w-full">
-                Set Custom Goal
+                Set Goal
               </Button>
             </CardContent>
           </Card>

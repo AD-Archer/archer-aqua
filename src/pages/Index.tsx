@@ -34,7 +34,7 @@ import { AchievementCard } from '@/components/AchievementCard';
 const Index = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { todayRecord, stats, goal, addDrink, updateGoal, removeDrink, loadRecordForDate, recordsByDate, isLoading: isDataLoading } = useWaterTracking();
+  const { todayRecord, stats, goal, addDrink, updateGoal, setDailyGoal, removeDrink, loadRecordForDate, recordsByDate, isLoading: isDataLoading, refreshData } = useWaterTracking();
   const [unitPreference, setUnitPreference] = useState(getUnitPreference());
   const [todayKey, setTodayKey] = useState(getTodayKey());
   const [selectedDate, setSelectedDate] = useState<string>(todayKey);
@@ -183,9 +183,9 @@ const Index = () => {
     }
   };
 
-  const handleAddDrink = async (type: DrinkType, amount: number, customDrinkId?: string) => {
+  const handleAddDrink = async (type: DrinkType, amount: number, customDrinkId?: string, date?: string) => {
     try {
-      await addDrink(type, amount, customDrinkId, selectedDate);
+      await addDrink(type, amount, customDrinkId, date || selectedDate);
       const drinkNames: Record<DrinkType, string> = {
         water: 'water',
         coffee: 'coffee',
@@ -251,16 +251,6 @@ const Index = () => {
     }
   };
 
-  const handleCalendarAddDrink = () => {
-    const nextTodayKey = getTodayKey();
-    setTodayKey(nextTodayKey);
-    setSelectedDate(nextTodayKey);
-    setCurrentTab('today');
-    const todayCandidate = todayRecord ?? recordsByDate[nextTodayKey] ?? null;
-    setSelectedRecord(todayCandidate);
-    setIsRecordLoading(false);
-  };
-
   const current = todayRecord?.totalHydration || 0;
   const percentage = (current / goal) * 100;
 
@@ -294,6 +284,13 @@ const Index = () => {
 
     return () => clearTimeout(timer);
   }, [location.pathname]); // Reset loading on navigation
+
+  // Refresh data when navigating back to this page
+  useEffect(() => {
+    if (location.pathname === '/' && !isCheckingProfile) {
+      refreshData();
+    }
+  }, [location.pathname, isCheckingProfile, refreshData]);
 
   useEffect(() => {
     if (backendHealthy === false) {
@@ -534,8 +531,9 @@ const Index = () => {
               recordsByDate={recordsByDate}
               isLoading={isRecordLoading}
               onRemoveDrink={handleRemoveDrink}
-              onAddDrink={handleCalendarAddDrink}
+              onAddDrink={handleAddDrink}
               onDateSelect={handleDateSelect}
+              onSetDailyGoal={setDailyGoal}
             />
           </TabsContent>
 

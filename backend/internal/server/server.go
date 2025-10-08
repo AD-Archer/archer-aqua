@@ -28,11 +28,12 @@ type Server struct {
 func New(cfg config.Config, db *gorm.DB, logger *slog.Logger) *Server {
 	userService := services.NewUserService(db)
 	drinkService := services.NewDrinkService(db)
-	hydrationService := services.NewHydrationService(db)
+	dailyGoalService := services.NewDailyGoalService(db)
+	hydrationService := services.NewHydrationService(db, dailyGoalService)
 	authService := services.NewAuthService(db, cfg)
 	weatherService := services.NewWeatherService(db)
 
-	api := handlers.NewAPI(userService, drinkService, hydrationService, authService, weatherService, logger)
+	api := handlers.NewAPI(userService, drinkService, hydrationService, dailyGoalService, authService, weatherService, logger)
 
 	r := chi.NewRouter()
 	configureMiddleware(r, cfg)
@@ -123,6 +124,10 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 				r.Get("/hydration/stats", api.HydrationStats)
 				r.Post("/hydration/logs", api.LogHydration)
 				r.Delete("/hydration/logs/{logID}", api.DeleteHydrationLog)
+
+				r.Get("/hydration/goals/daily", api.GetDailyGoal)
+				r.Post("/hydration/goals/daily", api.SetDailyGoal)
+				r.Delete("/hydration/goals/daily", api.DeleteDailyGoal)
 
 				// Weather endpoints
 				r.Get("/weather/current", api.GetCurrentWeather)
