@@ -3,6 +3,7 @@
 A modern, intelligent hydration tracking application with weather-based goal adjustments.
 
 ![Archer Aqua Hero](https://aqua.adarcher.app/assets/hero-image-VCssyCnr.png)
+Docker Hub - https://hub.docker.com/repository/docker/adarcher/archer-aqua/general
 
 ## Features
 

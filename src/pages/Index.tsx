@@ -554,9 +554,21 @@ const Index = () => {
         onClose={() => setShowPolicyDialog(false)}
         requiresPrivacy={requiresPrivacy}
         requiresTerms={requiresTerms}
-        onAccepted={(user) => {
-          // Update local state if needed
+        onAccepted={async (user) => {
+          // Policies accepted, now continue with the profile check
           setShowPolicyDialog(false);
+          
+          // Continue with the profile check that was interrupted
+          console.log('Index: Policies accepted, continuing profile check');
+          
+          if (!user.weight || !user.age) {
+            console.log('Index: Profile not complete after policy acceptance, redirecting to profile setup');
+            navigate('/profile-setup', { replace: true });
+            return;
+          }
+          
+          console.log('Index: Profile complete after policy acceptance, finishing setup');
+          setIsCheckingProfile(false);
         }}
       />
     </div>

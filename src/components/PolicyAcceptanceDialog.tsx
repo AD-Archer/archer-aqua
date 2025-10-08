@@ -88,14 +88,14 @@ export function PolicyAcceptanceDialog({
               <div className="flex-1">
                 <Label htmlFor="accept-privacy" className="text-sm font-medium">
                   I accept the updated{' '}
-                  <a
-                    href="/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    Privacy Policy
-                  </a>
+                                  <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Privacy Policy
+                </a>
                 </Label>
               </div>
             </div>
