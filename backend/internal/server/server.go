@@ -70,7 +70,7 @@ func configureMiddleware(r chi.Router, cfg config.Config) {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
-	r.Use(httprate.LimitByIP(100, time.Minute))
+	r.Use(httprate.LimitByIP(1000, time.Minute))
 
 	corsHandler := cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
@@ -144,12 +144,15 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 	// Serve static files for all other routes (SPA fallback)
 	fileServer := http.FileServer(http.Dir("./static"))
 	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/" || req.URL.Path == "" {
+			http.ServeFile(w, req, "./static/index.html")
+			return
+		}
 		// Check if file exists, if not serve index.html for SPA routing
-		if req.URL.Path != "/" {
-			if _, err := os.Stat("./static" + req.URL.Path); os.IsNotExist(err) {
-				// Serve index.html for client-side routing
-				req.URL.Path = "/"
-			}
+		path := "./static" + req.URL.Path
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			http.ServeFile(w, req, "./static/index.html")
+			return
 		}
 		fileServer.ServeHTTP(w, req)
 	})

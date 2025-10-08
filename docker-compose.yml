@@ -3,11 +3,11 @@ services:
     image: adarcher/archer-aqua:latest
     container_name: archer-aqua
     ports:
-      - "3000:8080"
+      - "5173:8080"
     env_file:
       - .env
     environment:
-      - PORT=8080
+      - PORT=${PORT}
       - FRONTEND_URL=${FRONTEND_URL}
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
