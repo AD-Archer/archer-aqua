@@ -19,30 +19,14 @@ This app integrates with OpenWeatherMap to dynamically adjust your hydration goa
 - Humidity levels (dry air increases needs)
 - Real-time local conditions
 
-### Setup Weather Integration
-
-1. Get a free API key from [OpenWeatherMap](https://openweathermap.org/api)
-2. Create a `.env` file in the root directory:
-   ```bash
-   VITE_OPENWEATHERMAP_API_KEY=your_api_key_here
-   ```
-3. Restart the development server
-
-For detailed documentation, see [WEATHER_INTEGRATION.md](./WEATHER_INTEGRATION.md)
-
 ## Project info
 
-**URL**: https://lovable.dev/projects/4e7f2d06-a668-40e8-9cbe-8acc3d732831
+**URL**: https://aqua.adarcher.app
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/4e7f2d06-a668-40e8-9cbe-8acc3d732831) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
 
 **Use your preferred IDE**
 
@@ -54,54 +38,29 @@ Follow these steps:
 
 ```sh
 # Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+git clone https://github.com/AD-Archer/archer-aqua
 
 # Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+cd https://github.com/AD-Archer/archer-aqua
 
 # Step 3: Install the necessary dependencies.
-npm i
+pnpm i
 
 # Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+pnpm run dev
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/4e7f2d06-a668-40e8-9cbe-8acc3d732831) and click on Share -> Publish.
 
 ## Docker Deployment
 
-This application can be deployed using Docker and Docker Compose. The Docker images are available on Docker Hub.
+This application can be deployed using Docker and Docker Compose. The Docker images are available on [Docker Hub](https://hub.docker.com/repository/docker/adarcher/archer-aqua/general).
 
-### Prerequisites
+### Features
 
-- Docker and Docker Compose installed
-- A PostgreSQL database (can be run separately or use the commented service in docker-compose.yml)
+- 🐳 **Containerized**: Easy deployment with Docker
+- 🗄️ **PostgreSQL Integration**: Built-in database support
+- 🔒 **Production Ready**: Optimized for production environments
+- 🔄 **Auto-restart**: Services restart automatically on failure
+- 🌐 **Environment Configurable**: Flexible configuration via environment variables
 
 ### Quick Start with Docker
 
@@ -111,50 +70,32 @@ This application can be deployed using Docker and Docker Compose. The Docker ima
    cd archer-aqua-deploy
    ```
 
-2. Download the docker-compose.yml and .env files:
+2. Download the production docker-compose file and environment template:
    ```sh
-   # Download from your repository or copy them
-   wget https://raw.githubusercontent.com/AD-Archer/archer-aqua/main/docker-compose.yml
-   wget https://raw.githubusercontent.com/AD-Archer/archer-aqua/main/.env
+   wget https://raw.githubusercontent.com/AD-Archer/archer-aqua/main/docker-compose.prod.yml
+   wget https://raw.githubusercontent.com/AD-Archer/archer-aqua/main/.env.example
+   cp .env.example .env.prod
    ```
 
-3. Edit the `.env` file with your production values (database URL, secrets, etc.)
+3. Edit the `.env.prod` file with your production values (database password, secrets, etc.)
 
 4. Run the application:
    ```sh
-   docker compose up -d
+   docker compose -f docker-compose.prod.yml up -d
    ```
 
-   The application will be available at http://localhost (both frontend and API)
-
-### Using External PostgreSQL
-
-The docker-compose.yml includes a commented PostgreSQL service. For production, use an external PostgreSQL database and update the `DATABASE_URL` in your `.env` file.
-
-# Uncomment the postgres service in docker-compose.yml if you want to run it locally:
-# postgres:
-#   image: postgres:15
-#   environment:
-#     POSTGRES_DB: archer-aqua
-#     POSTGRES_USER: archer_aqua_user
-#     POSTGRES_PASSWORD: JPMrkHW2eNHZ4KGax5nK8yzUailA6dO58RXijdwN
-#   ports:
-#     - "5432:5432"
-#   volumes:
-#     - postgres_data:/var/lib/postgresql/data
-#   restart: unless-stopped
-
-# volumes:
-#   postgres_data:
+   The application will be available at http://localhost:8080
 
 ### Environment Variables
 
-Make sure to set the following environment variables in your `.env` file:
+Make sure to set the following environment variables in your `.env.prod` file:
 
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for OAuth
-- `DATABASE_URL` for PostgreSQL connection
-- `JWT_SECRET` for session management
-- SMTP settings for email functionality
+- `POSTGRES_PASSWORD` - Database password
+- `DATABASE_URL` - PostgreSQL connection string (e.g., `postgres://archer_aqua_user:password@postgres:5432/archer_aqua?sslmode=disable`)
+- `JWT_SECRET` - Secret key for JWT tokens
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` - For OAuth authentication
+- `SMTP_*` - Email service configuration
+- Other application-specific settings
 
 ### Development
 
@@ -171,7 +112,7 @@ pnpm run dev
 
 The project includes GitHub Actions workflow that automatically builds and pushes a single Docker image to Docker Hub on pushes to the main branch.
 
-Image available at: `adarcher/archer-aqua`
+Docker Hub Repository: [adarcher/archer-aqua](https://hub.docker.com/repository/docker/adarcher/archer-aqua/general)
 
 ## Can I connect a custom domain to my Lovable project?
 
