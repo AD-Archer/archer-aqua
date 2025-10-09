@@ -55,8 +55,9 @@ type ForgotPasswordRequest struct {
 }
 
 type ResetPasswordRequest struct {
-	Token       string `json:"token"`
-	NewPassword string `json:"newPassword"`
+	Token       string  `json:"token"`
+	NewPassword string  `json:"newPassword"`
+	BackupCode  *string `json:"backupCode,omitempty"`
 }
 
 type AuthResponse struct {

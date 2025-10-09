@@ -485,11 +485,11 @@ func (s *AuthService) CurrentTermsVersion() string {
 
 func (s *AuthService) AcceptPolicies(ctx context.Context, userID uuid.UUID, version string) (*models.User, error) {
 	// For backward compatibility, accept both privacy and terms with the same version
-	user, err := s.AcceptPrivacy(ctx, userID, version)
+	_, err := s.AcceptPrivacy(ctx, userID, version)
 	if err != nil {
 		return nil, err
 	}
-	user, err = s.AcceptTerms(ctx, userID, version)
+	user, err := s.AcceptTerms(ctx, userID, version)
 	if err != nil {
 		return nil, err
 	}
@@ -738,7 +738,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
 }
 
 // ResetPassword resets password using a token
-func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string, backupCode *string) error {
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("password_reset_token = ?", token).First(&user).Error; err != nil {
 		return ErrInvalidToken
@@ -747,6 +747,33 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	// Check if token is expired
 	if user.PasswordResetExpiry != nil && time.Now().After(*user.PasswordResetExpiry) {
 		return ErrInvalidToken
+	}
+
+	// If 2FA is enabled, require backup code
+	if user.TwoFactorEnabled {
+		if backupCode == nil || *backupCode == "" {
+			return ErrTwoFactorRequired
+		}
+
+		// Validate backup code
+		valid, remainingCodes, err := s.twoFAService.ValidateBackupCode(*user.TwoFactorBackupCodes, *backupCode)
+		if err != nil {
+			return fmt.Errorf("failed to validate backup code: %w", err)
+		}
+		if !valid {
+			return ErrInvalidTwoFactorCode
+		}
+
+		// Update backup codes (remove the used one)
+		if len(remainingCodes) > 0 {
+			updatedCodesJSON, err := s.twoFAService.EncodeBackupCodes(remainingCodes)
+			if err != nil {
+				return fmt.Errorf("failed to encode updated backup codes: %w", err)
+			}
+			user.TwoFactorBackupCodes = &updatedCodesJSON
+		} else {
+			user.TwoFactorBackupCodes = nil
+		}
 	}
 
 	// Hash new password
@@ -759,6 +786,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	user.PasswordHash = &hashString
 	user.PasswordResetToken = nil
 	user.PasswordResetExpiry = nil
+	user.EmailVerified = true // Verify email as a consequence of successful password reset
 
 	return s.db.WithContext(ctx).Save(&user).Error
 }

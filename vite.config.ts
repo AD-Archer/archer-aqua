@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 5173,
+    historyApiFallback: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
@@ -20,7 +21,8 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
-    VitePWA({
+    // Only enable PWA in production builds to avoid service worker caching during development
+    mode === "production" ? VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'web-app-manifest-192x192.png', 'web-app-manifest-512x512.png'],
       manifest: {
@@ -65,7 +67,7 @@ export default defineConfig(({ mode }) => ({
           }
         ]
       }
-    })
+    }) : null
   ].filter(Boolean),
   build: {
     rollupOptions: {

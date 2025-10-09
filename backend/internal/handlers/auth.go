@@ -362,10 +362,18 @@ func (api *API) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.auth.ResetPassword(r.Context(), request.Token, request.NewPassword); err != nil {
+	if err := api.auth.ResetPassword(r.Context(), request.Token, request.NewPassword, request.BackupCode); err != nil {
 		logError(api.logger, "reset password", err)
 		if err == services.ErrInvalidToken {
 			respondError(w, http.StatusBadRequest, "invalid or expired reset token")
+			return
+		}
+		if err == services.ErrTwoFactorRequired {
+			respondError(w, http.StatusBadRequest, "two-factor authentication required - please provide a backup code")
+			return
+		}
+		if err == services.ErrInvalidTwoFactorCode {
+			respondError(w, http.StatusBadRequest, "invalid backup code")
 			return
 		}
 		respondError(w, http.StatusBadRequest, err.Error())

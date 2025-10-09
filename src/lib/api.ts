@@ -279,6 +279,7 @@ export interface ForgotPasswordPayload {
 export interface ResetPasswordPayload {
   token: string;
   newPassword: string;
+  backupCode?: string;
 }
 
 export interface Enable2FAResponse {

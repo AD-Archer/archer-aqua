@@ -148,6 +148,12 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 
 	// Serve static files for all other routes (SPA fallback)
 	fileServer := http.FileServer(http.Dir("./static"))
+
+	// Explicitly serve the SPA for the reset password route (no auth required)
+	r.Get("/reset-password", func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFile(w, req, "./static/index.html")
+	})
+
 	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/" || req.URL.Path == "" {
 			http.ServeFile(w, req, "./static/index.html")
