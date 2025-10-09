@@ -139,6 +139,7 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 				r.Post("/set-password", api.SetPassword)
 				r.Delete("/password", api.RemovePassword)
 				r.Post("/send-verification", api.SendEmailVerification)
+				r.Delete("/unlink-google", api.UnlinkGoogle)
 				r.Post("/enable-2fa", api.Enable2FA)
 				r.Post("/verify-2fa", api.Verify2FA)
 				r.Post("/disable-2fa", api.Disable2FA)

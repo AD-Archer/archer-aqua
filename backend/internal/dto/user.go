@@ -39,6 +39,7 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
+	Email                     *string          `json:"email"`
 	DisplayName               *string          `json:"displayName"`
 	Weight                    *WeightPayload   `json:"weight"`
 	Age                       *int             `json:"age"`

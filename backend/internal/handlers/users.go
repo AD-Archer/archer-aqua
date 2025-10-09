@@ -113,6 +113,17 @@ func (api *API) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle email change separately
+	if request.Email != nil {
+		if err := api.auth.UpdateEmail(r.Context(), userID, *request.Email); err != nil {
+			logError(api.logger, "update email", err)
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		// Remove email from request so user service doesn't try to handle it
+		request.Email = nil
+	}
+
 	user, err := api.users.UpdateUser(r.Context(), userID, request)
 	if err != nil {
 		logError(api.logger, "update user", err)

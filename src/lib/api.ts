@@ -245,6 +245,7 @@ export interface CreateUserPayload {
 }
 
 export interface UpdateUserPayload {
+  email?: string;
   displayName?: string;
   weight?: ApiWeightPayload;
   age?: number;
@@ -547,16 +548,17 @@ export async function acceptTerms(version: string) {
   });
 }
 
-export function getGoogleOAuthUrl(redirectUrl: string): string {
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured. Set VITE_API_BASE_URL in your environment.');
-  }
+export async function getGoogleOAuthUrl(redirectUrl: string, skipAuth: boolean = false): Promise<string> {
   const params = new URLSearchParams();
   if (redirectUrl) {
     params.set('redirect', redirectUrl);
   }
   const suffix = params.toString();
-  return `${API_BASE_URL}/api/auth/google/login${suffix ? `?${params}` : ''}`;
+  const response = await request<{ url: string }>(`/api/auth/google/login${suffix ? `?${params}` : ''}`, {
+    method: 'GET',
+    skipAuth,
+  });
+  return response.url;
 }
 
 // Password Management
@@ -593,6 +595,13 @@ export async function resetPassword(payload: ResetPasswordPayload) {
     method: 'POST',
     body: JSON.stringify(payload),
     skipAuth: true,
+  });
+}
+
+// Google Account Management
+export async function unlinkGoogle(userId: string) {
+  return request<ApiUserResponse>(`/api/users/${userId}/unlink-google`, {
+    method: 'DELETE',
   });
 }
 

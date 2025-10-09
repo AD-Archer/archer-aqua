@@ -272,16 +272,22 @@ export default function Auth() {
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     if (!apiEnabled) {
       toast.info('Start the backend server to use Google sign-in.');
       return;
     }
 
     setIsGoogleLoading(true);
-    const redirectTarget = `${window.location.origin}/auth`;
-    const url = getGoogleOAuthUrl(redirectTarget);
-    window.location.href = url;
+    try {
+      const redirectTarget = `${window.location.origin}/auth`;
+      const url = await getGoogleOAuthUrl(redirectTarget, true);
+      window.location.href = url;
+    } catch (error) {
+      console.error('Failed to get Google OAuth URL:', error);
+      toast.error('Failed to initiate Google login');
+      setIsGoogleLoading(false);
+    }
   };
 
   return (

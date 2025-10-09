@@ -12,6 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+func extractToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return ""
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+
+	return strings.TrimSpace(parts[1])
+}
+
 func (api *API) Register(w http.ResponseWriter, r *http.Request) {
 	var request dto.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -150,14 +164,23 @@ func (api *API) AcceptPolicies(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) BeginGoogleOAuth(w http.ResponseWriter, r *http.Request) {
 	redirect := r.URL.Query().Get("redirect")
-	authURL, _, err := api.auth.GoogleAuthURL(redirect)
+
+	// Check if user is authenticated (for linking)
+	var userID string
+	if token := extractToken(r); token != "" {
+		if claims, err := api.auth.ParseToken(token); err == nil {
+			userID = claims.UserID
+		}
+	}
+
+	authURL, _, err := api.auth.GoogleAuthURL(redirect, userID)
 	if err != nil {
 		logError(api.logger, "google oauth redirect", err)
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+	respondJSON(w, http.StatusOK, map[string]string{"url": authURL})
 }
 
 func (api *API) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -529,6 +552,31 @@ func (api *API) AcceptTerms(w http.ResponseWriter, r *http.Request) {
 	user, err := api.auth.AcceptTerms(r.Context(), userID, request.Version)
 	if err != nil {
 		logError(api.logger, "accept terms", err)
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userResponse := dto.NewUserResponse(*user, api.auth.CurrentPrivacyVersion(), api.auth.CurrentTermsVersion())
+	respondJSON(w, http.StatusOK, userResponse)
+}
+
+// UnlinkGoogle removes Google account association
+func (api *API) UnlinkGoogle(w http.ResponseWriter, r *http.Request) {
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid token subject")
+		return
+	}
+
+	user, err := api.auth.UnlinkGoogle(r.Context(), userID)
+	if err != nil {
+		logError(api.logger, "unlink google", err)
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}

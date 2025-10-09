@@ -241,7 +241,7 @@ func (s *AuthService) LoginWithTwoFactor(ctx context.Context, email, password st
 	return &user, token, profileIsComplete(user), nil
 }
 
-func (s *AuthService) GoogleAuthURL(redirect string) (string, string, error) {
+func (s *AuthService) GoogleAuthURL(redirect, userID string) (string, string, error) {
 	if s.oauthConfig == nil {
 		return "", "", ErrGoogleOAuthDisabled
 	}
@@ -249,7 +249,7 @@ func (s *AuthService) GoogleAuthURL(redirect string) (string, string, error) {
 	defaultRedirect := s.cfg.FrontendURL + "/auth"
 	redirectURL := SanitizeRedirect(defaultRedirect, redirect)
 
-	stateToken, err := s.encodeStateToken(redirectURL)
+	stateToken, err := s.encodeStateToken(redirectURL, userID)
 	if err != nil {
 		return "", "", err
 	}
@@ -262,7 +262,7 @@ func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state stri
 		return nil, "", "", ErrGoogleOAuthDisabled
 	}
 
-	redirectTarget, err := s.decodeStateToken(state)
+	redirectTarget, userID, err := s.decodeStateToken(state)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -298,7 +298,7 @@ func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state stri
 		return nil, "", "", errors.New("google response missing id or email")
 	}
 
-	user, err := s.upsertGoogleUser(ctx, googleUser.Email, googleUser.ID, googleUser.Name)
+	user, err := s.upsertGoogleUser(ctx, googleUser.Email, googleUser.ID, googleUser.Name, userID)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -348,40 +348,43 @@ func (s *AuthService) ClaimsFromContext(ctx context.Context) (*TokenClaims, bool
 	return claims, ok
 }
 
-func (s *AuthService) encodeStateToken(redirect string) (string, error) {
+func (s *AuthService) encodeStateToken(redirect, userID string) (string, error) {
 	claims := jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		Issuer:    s.cfg.JWTIssuer,
 		Subject:   "google_oauth_state",
 		Audience:  []string{redirect},
+		ID:        userID, // Use ID field for userID
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.cfg.JWTSecret))
 }
 
-func (s *AuthService) decodeStateToken(state string) (string, error) {
+func (s *AuthService) decodeStateToken(state string) (string, string, error) {
 	claims := &jwt.RegisteredClaims{}
 	parsedToken, err := jwt.ParseWithClaims(state, claims, func(token *jwt.Token) (any, error) {
 		return []byte(s.cfg.JWTSecret), nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("decode state: %w", err)
+		return "", "", fmt.Errorf("decode state: %w", err)
 	}
 	if !parsedToken.Valid {
-		return "", errors.New("invalid state token")
+		return "", "", errors.New("invalid state token")
 	}
 	if len(claims.Audience) == 0 {
-		return "", errors.New("state missing redirect")
+		return "", "", errors.New("state missing redirect")
 	}
 
 	redirect := claims.Audience[0]
+	userID := claims.ID // Get userID from ID field
+
 	if !strings.HasPrefix(redirect, s.cfg.FrontendURL) {
-		return "", errors.New("redirect host not allowed")
+		return "", "", errors.New("redirect host not allowed")
 	}
 
-	return redirect, nil
+	return redirect, userID, nil
 }
 
 func (s *AuthService) generateToken(user *models.User) (string, error) {
@@ -400,33 +403,53 @@ func (s *AuthService) generateToken(user *models.User) (string, error) {
 	return token.SignedString([]byte(s.cfg.JWTSecret))
 }
 
-func (s *AuthService) upsertGoogleUser(ctx context.Context, email, googleID, name string) (*models.User, error) {
+func (s *AuthService) upsertGoogleUser(ctx context.Context, email, googleID, name, linkUserID string) (*models.User, error) {
 	email = strings.ToLower(email)
 	var user models.User
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Where("google_subject = ?", googleID).First(&user)
-		if result.Error != nil {
-			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				return result.Error
+		// If linking to existing user, find by userID
+		if linkUserID != "" {
+			if err := tx.First(&user, "id = ?", linkUserID).Error; err != nil {
+				return err
 			}
 
-			result = tx.Where("email = ?", email).First(&user)
+			// Check if Google ID is already linked to another user
+			var existingUser models.User
+			if err := tx.Where("google_subject = ?", googleID).First(&existingUser).Error; err == nil {
+				if existingUser.ID.String() != linkUserID {
+					return fmt.Errorf("this Google account is already linked to another account. Please use a different Google account or unlink it from the other account first")
+				}
+				// If it's already linked to this user, we're done
+				return nil
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		} else {
+			// Original login flow: find by Google ID or email
+			result := tx.Where("google_subject = ?", googleID).First(&user)
 			if result.Error != nil {
 				if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
 					return result.Error
 				}
 
-				user = models.User{
-					Email:                     email,
-					DisplayName:               name,
-					VolumeUnit:                "ml",
-					TemperatureUnit:           "c",
-					ProgressWheelStyle:        "drink_colors",
-					WeatherAdjustmentsEnabled: true,
-				}
-				if err := tx.Create(&user).Error; err != nil {
-					return err
+				result = tx.Where("email = ?", email).First(&user)
+				if result.Error != nil {
+					if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+						return result.Error
+					}
+
+					user = models.User{
+						Email:                     email,
+						DisplayName:               name,
+						VolumeUnit:                "ml",
+						TemperatureUnit:           "c",
+						ProgressWheelStyle:        "drink_colors",
+						WeatherAdjustmentsEnabled: true,
+					}
+					if err := tx.Create(&user).Error; err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -913,4 +936,64 @@ func (s *AuthService) Disable2FA(ctx context.Context, userID uuid.UUID, password
 	user.TwoFactorBackupCodes = nil
 
 	return s.db.WithContext(ctx).Save(&user).Error
+}
+
+// UnlinkGoogle removes the Google account association from a user
+func (s *AuthService) UnlinkGoogle(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	user, err := s.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.GoogleSubject == nil {
+		return nil, fmt.Errorf("user is not linked to Google")
+	}
+
+	// Ensure user has an alternative authentication method
+	if user.PasswordHash == nil {
+		return nil, fmt.Errorf("cannot unlink Google account without a password set")
+	}
+
+	user.GoogleSubject = nil
+
+	return user, s.db.WithContext(ctx).Save(user).Error
+}
+
+// UpdateEmail changes the user's email address and sends verification
+func (s *AuthService) UpdateEmail(ctx context.Context, userID uuid.UUID, newEmail string) error {
+	user, err := s.GetUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.GoogleSubject != nil {
+		return fmt.Errorf("cannot change email while linked to Google account")
+	}
+
+	newEmail = strings.ToLower(strings.TrimSpace(newEmail))
+	if newEmail == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+
+	if newEmail == user.Email {
+		return nil // No change needed
+	}
+
+	// Check if email is already taken
+	var existingUser models.User
+	if err := s.db.Where("email = ? AND id != ?", newEmail, userID).First(&existingUser).Error; err == nil {
+		return fmt.Errorf("email already in use")
+	}
+
+	user.Email = newEmail
+	user.EmailVerified = false
+	user.EmailVerificationToken = nil
+	user.EmailVerificationExpiry = nil
+
+	if err := s.db.WithContext(ctx).Save(user).Error; err != nil {
+		return fmt.Errorf("update email: %w", err)
+	}
+
+	// Send verification email
+	return s.SendEmailVerification(ctx, userID)
 }
