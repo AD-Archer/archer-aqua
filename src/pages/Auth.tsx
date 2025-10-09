@@ -25,6 +25,7 @@ import {
 import {
   loginUser,
   registerUser,
+  forgotPassword,
   getGoogleOAuthUrl,
   getAuthState,
   type ApiAuthResponse,
@@ -103,6 +104,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -242,16 +244,50 @@ export default function Auth() {
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error('Please enter a valid email');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await forgotPassword({ email });
+      toast.success('If the email exists, a reset link has been sent');
+      setIsForgotPassword(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send reset email';
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
     if (!apiEnabled) {
       toast.info('Start the backend server to use Google sign-in.');
       return;
     }
 
     setIsGoogleLoading(true);
-    const redirectTarget = `${window.location.origin}/auth`;
-    const url = getGoogleOAuthUrl(redirectTarget);
-    window.location.href = url;
+    try {
+      const redirectTarget = `${window.location.origin}/auth`;
+      const url = await getGoogleOAuthUrl(redirectTarget, true);
+      window.location.href = url;
+    } catch (error) {
+      console.error('Failed to get Google OAuth URL:', error);
+      toast.error('Failed to initiate Google login');
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -266,100 +302,132 @@ export default function Auth() {
             <span className="text-primary">AQUA</span>
           </CardTitle>
           <CardDescription>
-            {isSignUp ? 'Create your account' : 'Welcome back'}
+            {isForgotPassword ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
+          {isForgotPassword ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="name"
-                  type="text"
-                  placeholder="Your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required={isSignUp}
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
 
-            {requiresTwoFactor && (
+              <Button type="submit" className="w-full bg-gradient-water" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Send Reset Email
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {isSignUp && (
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Your name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required={isSignUp}
+                  />
+                </div>
+              )}
+              
               <div className="space-y-2">
-                <Label htmlFor="twoFactorCode">Two-Factor Authentication Code</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="twoFactorCode"
-                  type="text"
-                  placeholder="000000"
-                  value={twoFactorCode}
-                  onChange={(e) => setTwoFactorCode(e.target.value)}
-                  maxLength={6}
-                  required={requiresTwoFactor}
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
-            )}
-
-            {isSignUp && (
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="acceptPrivacy"
-                    checked={acceptPrivacy}
-                    onCheckedChange={(checked) => setAcceptPrivacy(checked as boolean)}
-                  />
-                  <Label htmlFor="acceptPrivacy" className="text-sm">
-                    I accept the{' '}
-                    <a href="/privacy" target="_blank" className="text-primary hover:underline">
-                      Privacy Policy
-                    </a>
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="acceptTerms"
-                    checked={acceptTerms}
-                    onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
-                  />
-                  <Label htmlFor="acceptTerms" className="text-sm">
-                    I accept the{' '}
-                    <a href="/terms" target="_blank" className="text-primary hover:underline">
-                      Terms of Service
-                    </a>
-                  </Label>
-                </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                {!isSignUp && !isForgotPassword && (
+                  <div className="text-right mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotPassword(true)}
+                      className="text-sm text-primary hover:text-primary/80 underline"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
 
-            <Button type="submit" className="w-full bg-gradient-water" disabled={isSubmitting || isGoogleLoading || (isSignUp && (!acceptPrivacy || !acceptTerms))}>
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isSignUp ? 'Sign Up' : 'Sign In'}
-            </Button>
-          </form>
+              {requiresTwoFactor && (
+                <div className="space-y-2">
+                  <Label htmlFor="twoFactorCode">Two-Factor Authentication Code</Label>
+                  <Input
+                    id="twoFactorCode"
+                    type="text"
+                    placeholder="000000"
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value)}
+                    maxLength={6}
+                    required={requiresTwoFactor}
+                  />
+                </div>
+              )}
+
+              {isSignUp && (
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="acceptPrivacy"
+                      checked={acceptPrivacy}
+                      onCheckedChange={(checked) => setAcceptPrivacy(checked as boolean)}
+                    />
+                    <Label htmlFor="acceptPrivacy" className="text-sm">
+                      I accept the{' '}
+                      <a href="/privacy" target="_blank" className="text-primary hover:underline">
+                        Privacy Policy
+                      </a>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="acceptTerms"
+                      checked={acceptTerms}
+                      onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+                    />
+                    <Label htmlFor="acceptTerms" className="text-sm">
+                      I accept the{' '}
+                      <a href="/terms" target="_blank" className="text-primary hover:underline">
+                        Terms of Service
+                      </a>
+                    </Label>
+                  </div>
+                </div>
+              )}
+
+              <Button type="submit" className="w-full bg-gradient-water" disabled={isSubmitting || isGoogleLoading || (isSignUp && (!acceptPrivacy || !acceptTerms))}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {isSignUp ? 'Sign Up' : 'Sign In'}
+              </Button>
+            </form>
+          )}
 
           <div className="mt-4">
             <Button
@@ -383,16 +451,33 @@ export default function Auth() {
             )}
           </div>
 
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm text-primary hover:underline"
-            >
-              {isSignUp
-                ? 'Already have an account? Sign in'
-                : "Don't have an account? Sign up"}
-            </button>
+          <div className="mt-4 text-center space-y-2">
+            {!isForgotPassword && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setIsSignUp(!isSignUp)}
+                  className="text-sm text-primary hover:underline"
+                >
+                  {isSignUp
+                    ? 'Already have an account? Sign in'
+                    : "Don't have an account? Sign up"}
+                </button>
+              </div>
+            )}
+            {isForgotPassword && (
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsForgotPassword(false)}
+                  className="text-primary hover:text-primary/80"
+                >
+                  Back to Sign In
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

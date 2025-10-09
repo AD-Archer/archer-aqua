@@ -10,6 +10,7 @@ import { PRIVACY_ROUTE, TERMS_ROUTE } from "./lib/policies";
 // Lazy load components for better performance
 const Landing = lazy(() => import("./pages/Landing"));
 const Auth = lazy(() => import("./pages/Auth"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const Index = lazy(() => import("./pages/Index"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -45,6 +46,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/profile-setup" element={<ProfileSetup />} />
             <Route path="/app" element={<Index />} />
             <Route path="/settings" element={<Settings />} />

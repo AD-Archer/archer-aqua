@@ -38,6 +38,9 @@ import {
   deleteUserAccount,
   exportUserData,
   setDailyGoal,
+  unlinkGoogle,
+  UpdateUserPayload,
+  getGoogleOAuthUrl,
 } from '@/lib/api';
 import { getLocationPreference } from '@/lib/weather';
 
@@ -101,6 +104,16 @@ export default function Settings() {
     const checkAuthAndLoadProfile = async () => {
       if (!isAuthenticated()) {
         navigate('/auth');
+        return;
+      }
+
+      // Handle OAuth callback errors
+      const params = new URLSearchParams(location.search);
+      const errorParam = params.get('error');
+      if (errorParam) {
+        toast.error(errorParam);
+        // Clean up the URL
+        navigate('/settings', { replace: true });
         return;
       }
 
@@ -310,7 +323,69 @@ export default function Settings() {
     saveTemperatureUnitPreference(temperatureUnit);
     saveTimezone(timezone);
 
-    // Always recalculate personalized goal and reset to personalized mode
+    // Sync to backend if enabled
+    if (backendIsEnabled()) {
+      try {
+        const userId = getBackendUserId();
+        if (userId) {
+          // Update backend with all profile data including display name
+          const updatePayload: UpdateUserPayload = {
+            displayName: displayName,
+            weight: {
+              value: weightValue,
+              unit: weightUnit
+            },
+            age: ageNum,
+            gender,
+            activityLevel,
+            timezone,
+            volumeUnit: unitPreference,
+            temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
+            progressWheelStyle: progressWheelStyle.replace('-', '_'),
+            weatherAdjustmentsEnabled: useWeatherAdjustment,
+          };
+
+          // Only include email if not linked to Google
+          if (!isGoogleUser) {
+            updatePayload.email = email;
+          }
+
+          await updateBackendUser(userId, updatePayload);
+        }
+        await syncProfileToBackend();
+        toast.success('Profile updated!');
+      } catch (error) {
+        console.error('Failed to sync profile to backend', error);
+        toast.warning('Profile updated locally, but failed to sync with server');
+      }
+    } else {
+      toast.success('Profile updated!');
+    }
+  };
+
+  const handleRecalculateGoal = async () => {
+    const weightValue = parseFloat(weight);
+    const ageNum = parseInt(age);
+
+    // Convert weight to kg for storage
+    const weightInKg = weightUnit === 'lbs' ? lbsToKg(weightValue) : weightValue;
+
+    const user = getUser();
+    const profile: UserProfile = {
+      name: user?.name || '',
+      email: user?.email || '',
+      weight: weightInKg, // Always store in kg
+      age: ageNum,
+      gender,
+      activityLevel,
+      climate,
+      createdAt: new Date(),
+      preferredWeightUnit: weightUnit,
+      preferredTemperatureUnit: temperatureUnit,
+      timezone: timezone,
+    };
+
+    // Recalculate personalized goal and reset to personalized mode
     const personalizedGoalMl = calculatePersonalizedGoal(profile, useWeatherAdjustment);
     saveDailyGoal(personalizedGoalMl);
     setManualGoal((personalizedGoalMl / 1000).toFixed(1));
@@ -326,33 +401,19 @@ export default function Settings() {
           const today = getTodayKey();
           await setDailyGoal(userId, today, personalizedGoalMl);
 
-          // Update backend with all profile data including display name
+          // Update backend with goal reset
           await updateBackendUser(userId, {
-            displayName: displayName,
-            weight: {
-              value: weightValue,
-              unit: weightUnit
-            },
-            age: ageNum,
-            gender,
-            activityLevel,
-            timezone,
-            volumeUnit: unitPreference,
-            temperatureUnit: temperatureUnit === 'F' ? 'fahrenheit' : 'celsius',
-            progressWheelStyle: progressWheelStyle.replace('-', '_'),
-            weatherAdjustmentsEnabled: useWeatherAdjustment,
             customGoalLiters: null, // Reset to personalized goal
           });
         }
-        await syncProfileToBackend();
-        toast.success('Profile synced to backend!');
+        toast.success('Goal recalculated!');
       } catch (error) {
-        console.error('Failed to sync profile to backend', error);
-        toast.warning('Profile updated locally, but failed to sync with server');
+        console.error('Failed to sync goal to backend', error);
+        toast.warning('Goal updated locally, but failed to sync with server');
       }
     } else {
       const goalLitersForMessage = personalizedGoalMl / 1000;
-      toast.success(`Profile updated! Daily goal: ${goalLitersForMessage.toFixed(1)}L`);
+      toast.success(`Goal recalculated: ${goalLitersForMessage.toFixed(1)}L`);
     }
   };
 
@@ -715,6 +776,36 @@ export default function Settings() {
     }
   };
 
+  const handleUnlinkGoogle = async () => {
+    if (!hasPassword) {
+      toast.error('Cannot unlink Google account without a password set');
+      return;
+    }
+
+    try {
+      const userId = getBackendUserId();
+      if (userId) {
+        await unlinkGoogle(userId);
+        toast.success('Google account unlinked successfully');
+        setIsGoogleUser(false);
+      }
+    } catch (error) {
+      console.error('Failed to unlink Google account:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to unlink Google account');
+    }
+  };
+
+  const handleLinkGoogle = async () => {
+    try {
+      const redirectUrl = window.location.origin + '/settings';
+      const authUrl = await getGoogleOAuthUrl(redirectUrl);
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Failed to get Google OAuth URL:', error);
+      toast.error('Failed to initiate Google login');
+    }
+  };
+
   const handleEnable2FA = async () => {
     try {
       const userId = getBackendUserId();
@@ -906,10 +997,12 @@ export default function Settings() {
                     <Input
                       id="email"
                       value={email}
-                      readOnly
-                      className="bg-muted"
+                      onChange={(e) => setEmail(e.target.value)}
+                      readOnly={isGoogleUser}
+                      className={isGoogleUser ? "bg-muted" : ""}
+                      placeholder={isGoogleUser ? "Linked to Google account" : "Enter your email"}
                     />
-                    {!emailVerified && (
+                    {!emailVerified && !isGoogleUser && (
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -919,7 +1012,9 @@ export default function Settings() {
                       </Button>
                     )}
                   </div>
-                  {emailVerified ? (
+                  {isGoogleUser ? (
+                    <p className="text-xs text-blue-600">Linked to Google account - unlink to change email</p>
+                  ) : emailVerified ? (
                     <p className="text-xs text-green-600">✓ Verified</p>
                   ) : (
                     <p className="text-xs text-orange-600">⚠ Not verified</p>
@@ -963,6 +1058,16 @@ export default function Settings() {
                         Remove Password
                       </Button>
                     )}
+                    {isGoogleUser && hasPassword && (
+                      <Button variant="outline" size="sm" onClick={handleUnlinkGoogle}>
+                        Unlink Google
+                      </Button>
+                    )}
+                    {!isGoogleUser && (
+                      <Button variant="outline" size="sm" onClick={handleLinkGoogle}>
+                        Link Google
+                      </Button>
+                    )}
                     {!twoFactorEnabled ? (
                       <Button variant="outline" size="sm" onClick={handleEnable2FA}>
                         Enable 2FA
@@ -974,6 +1079,9 @@ export default function Settings() {
                     )}
                   </div>
                 </div>
+                 <Button onClick={handleUpdateProfile} className="flex-1 mt-2 md:col-span-2">
+                  Update Profile
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -1078,14 +1186,19 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">
                     Enable weather-based adjustments below for automatic climate detection
                   </p>
+               
                 </div>
               )}
 
-              <Button onClick={handleUpdateProfile} className="w-full bg-gradient-water">
-                Update Profile & Recalculate Goal
-              </Button>
             </CardContent>
+          {/* Profile Action Buttons */}
+          <div className="flex gap-4 p-4 pt-0">
+            <Button onClick={handleRecalculateGoal} variant="outline" className="flex-1">
+              Recalculate Goal
+            </Button>
+          </div>
           </Card>
+
 
           {/* Manual Goal Setting */}
           <Card>
