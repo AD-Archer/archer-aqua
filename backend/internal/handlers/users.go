@@ -308,10 +308,41 @@ func (api *API) ClearConnectionCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the current connection code before clearing
+	userModel, err := api.users.GetUser(r.Context(), userUUID)
+	if err != nil {
+		logError(api.logger, "get user", err)
+		respondError(w, http.StatusInternalServerError, "failed to get user")
+		return
+	}
+
+	oldCode := ""
+	if userModel.ArcherHealthConnectionCode != nil {
+		oldCode = *userModel.ArcherHealthConnectionCode
+	}
+
 	if err := api.users.UpdateUserConnectionCode(r.Context(), userUUID, ""); err != nil {
 		logError(api.logger, "clear user connection code", err)
 		respondError(w, http.StatusInternalServerError, "failed to clear connection")
 		return
+	}
+
+	// Notify Archer Health to clear the connection
+	if oldCode != "" {
+		healthAPIPath := "/api/generate-connection-code"
+		healthBase := api.HealthAppURL
+		if strings.TrimSpace(healthBase) == "" {
+			healthBase = "https://health.adarcher.app"
+		}
+		healthBase = strings.TrimRight(healthBase, "/")
+		healthAPIURL := healthBase + healthAPIPath + "?connectionCode=" + oldCode
+
+		resp, err := http.Post(healthAPIURL, "application/json", nil)
+		if err != nil {
+			logError(api.logger, "notify health to clear connection", err)
+		} else {
+			resp.Body.Close()
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
