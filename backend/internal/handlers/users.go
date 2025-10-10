@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -206,6 +208,113 @@ func (api *API) ImportUserData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, data)
+}
+
+func (api *API) RedeemConnectionCode(w http.ResponseWriter, r *http.Request) {
+	var request dto.RedeemConnectionCodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	// Call Archer Health API to redeem the code. Use configured HealthAppURL when provided.
+	healthAPIPath := "/api/redeem-connection-code"
+	healthBase := api.HealthAppURL
+	if strings.TrimSpace(healthBase) == "" {
+		// backward-compat default
+		healthBase = "https://health.adarcher.app"
+	}
+
+	// Ensure base does not end with slash
+	healthBase = strings.TrimRight(healthBase, "/")
+	healthAPIURL := healthBase + healthAPIPath
+
+	payload := map[string]interface{}{
+		"connectionCode":     request.ConnectionCode,
+		// claims.UserID may be a uuid.UUID or string depending on auth implementation; ensure string
+		"archerAquaUserId": claims.UserID,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		logError(api.logger, "marshal payload", err)
+		respondError(w, http.StatusInternalServerError, "failed to prepare request")
+		return
+	}
+
+	// Log which URL we're about to call for debugging local env issues
+	if api.logger != nil {
+		api.logger.Info("calling health API", slog.String("url", healthAPIURL))
+	}
+
+	resp, err := http.Post(healthAPIURL, "application/json", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		logError(api.logger, "call health API", err)
+		respondError(w, http.StatusInternalServerError, "failed to connect to Archer Health")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&errorResp); err != nil {
+			logError(api.logger, "decode error response", err)
+			respondError(w, http.StatusInternalServerError, "invalid response from Archer Health")
+			return
+		}
+		respondError(w, resp.StatusCode, errorResp["error"])
+		return
+	}
+
+	// Store the connection code locally; ensure we have a UUID for the user id
+	var userUUID uuid.UUID
+	if parsed, err := uuid.Parse(claims.UserID); err == nil {
+		userUUID = parsed
+	} else {
+		// If claims.UserID isn't a UUID, attempt to use it as-is will fail; return error
+		logError(api.logger, "invalid user id in claims", err)
+		respondError(w, http.StatusInternalServerError, "invalid user id")
+		return
+	}
+
+	if err := api.users.UpdateUserConnectionCode(r.Context(), userUUID, request.ConnectionCode); err != nil {
+		logError(api.logger, "update user connection code", err)
+		respondError(w, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+}
+
+func (api *API) ClearConnectionCode(w http.ResponseWriter, r *http.Request) {
+	claims, ok := api.auth.ClaimsFromContext(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var userUUID uuid.UUID
+	if parsed, err := uuid.Parse(claims.UserID); err == nil {
+		userUUID = parsed
+	} else {
+		logError(api.logger, "invalid user id in claims", err)
+		respondError(w, http.StatusInternalServerError, "invalid user id")
+		return
+	}
+
+	if err := api.users.UpdateUserConnectionCode(r.Context(), userUUID, ""); err != nil {
+		logError(api.logger, "clear user connection code", err)
+		respondError(w, http.StatusInternalServerError, "failed to clear connection")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
 func parseUUIDParam(r *http.Request, key string) (uuid.UUID, error) {

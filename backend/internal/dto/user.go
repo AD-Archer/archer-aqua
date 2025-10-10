@@ -9,6 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type RedeemConnectionCodeRequest struct {
+	ConnectionCode string `json:"connectionCode"`
+}
+
 type WeightPayload struct {
 	Value float64 `json:"value"`
 	Unit  string  `json:"unit"`
@@ -90,6 +94,7 @@ type UserResponse struct {
 	PoliciesAcceptedAt        *time.Time      `json:"policiesAcceptedAt"`       // Backward compatibility
 	PoliciesCurrentVersion    string          `json:"policiesCurrentVersion"`   // Backward compatibility
 	RequiresPolicyAcceptance  bool            `json:"requiresPolicyAcceptance"` // Backward compatibility
+	ArcherHealthConnectionCode *string `json:"archerHealthConnectionCode"`
 }
 
 type UserSummaryResponse struct {
@@ -148,5 +153,6 @@ func NewUserResponse(user models.User, currentPrivacyVersion, currentTermsVersio
 		PoliciesAcceptedAt:        user.PrivacyAcceptedAt,                                                                                                                                                                                                                                                                     // Backward compatibility
 		PoliciesCurrentVersion:    currentPrivacyVersion,                                                                                                                                                                                                                                                                      // Backward compatibility
 		RequiresPolicyAcceptance:  strings.TrimSpace(currentPrivacyVersion) != "" && (user.PrivacyAcceptedVersion == nil || *user.PrivacyAcceptedVersion != currentPrivacyVersion) || strings.TrimSpace(currentTermsVersion) != "" && (user.TermsAcceptedVersion == nil || *user.TermsAcceptedVersion != currentTermsVersion), // Backward compatibility
+		ArcherHealthConnectionCode: user.ArcherHealthConnectionCode,
 	}
 }

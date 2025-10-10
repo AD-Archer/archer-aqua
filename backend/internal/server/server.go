@@ -33,12 +33,12 @@ func New(cfg config.Config, db *gorm.DB, logger *slog.Logger) *Server {
 	authService := services.NewAuthService(db, cfg)
 	weatherService := services.NewWeatherService(db)
 
-	api := handlers.NewAPI(userService, drinkService, hydrationService, dailyGoalService, authService, weatherService, logger)
+	api := handlers.NewAPI(userService, drinkService, hydrationService, dailyGoalService, authService, weatherService, logger, cfg.HealthAppURL)
 
 	r := chi.NewRouter()
 	configureMiddleware(r, cfg)
 	authMiddleware := appmiddleware.RequireAuth(authService)
-	registerRoutes(r, api, authMiddleware)
+	registerRoutes(r, api, authMiddleware, cfg)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -86,10 +86,13 @@ func configureMiddleware(r chi.Router, cfg config.Config) {
 	r.Use(chimiddleware.SetHeader("Cache-Control", "no-store"))
 }
 
-func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Handler) http.Handler) {
+func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Handler) http.Handler, cfg config.Config) {
 	r.Get("/healthz", handlers.Health)
 
 	r.Route("/api", func(r chi.Router) {
+		// Public runtime config for frontend to read (optional)
+		r.Get("/config", handlers.ConfigHandler(cfg))
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", api.Register)
 			r.Post("/login", api.Login)
@@ -99,6 +102,8 @@ func registerRoutes(r chi.Router, api *handlers.API, authMiddleware func(http.Ha
 			r.With(authMiddleware).Post("/accept-policies", api.AcceptPolicies)
 			r.With(authMiddleware).Post("/accept-privacy", api.AcceptPrivacy)
 			r.With(authMiddleware).Post("/accept-terms", api.AcceptTerms)
+			r.With(authMiddleware).Post("/redeem-connection-code", api.RedeemConnectionCode)
+			r.With(authMiddleware).Delete("/connection-code", api.ClearConnectionCode)
 
 			// Password management
 			r.Post("/forgot-password", api.ForgotPassword)

@@ -27,6 +27,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Log resolved HealthAppURL for debugging local dev issues
+	logger.Info("resolved config", slog.String("healthAppUrl", cfg.HealthAppURL), slog.String("frontendUrl", cfg.FrontendURL))
+
 	dbConn, err := db.Connect(cfg, logger)
 	if err != nil {
 		logger.Error("failed to connect to database", slog.Any("error", err))

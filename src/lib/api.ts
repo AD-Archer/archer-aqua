@@ -1,40 +1,44 @@
-import type { DrinkType } from '@/types/water';
-import { clearAuthToken, getAuthToken } from './storage';
+import type { DrinkType } from "@/types/water";
+import { clearAuthToken, getAuthToken } from "./storage";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
-type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
-
-interface RequestOptions extends RequestInit {
-  method?: HttpMethod;
-  skipAuth?: boolean;
-}
+type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 interface RequestOptions extends RequestInit {
   method?: HttpMethod;
   skipAuth?: boolean;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+interface RequestOptions extends RequestInit {
+  method?: HttpMethod;
+  skipAuth?: boolean;
+}
+
+async function request<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
   const { skipAuth = false, ...fetchOptions } = options;
 
   const headers = new Headers(fetchOptions.headers);
 
   const isFormData = fetchOptions.body instanceof FormData;
   if (!isFormData) {
-    headers.set('Content-Type', 'application/json');
+    headers.set("Content-Type", "application/json");
   }
 
   if (!skipAuth) {
     const token = getAuthToken();
     if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
+      headers.set("Authorization", `Bearer ${token}`);
     }
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...fetchOptions,
-    method: fetchOptions.method ?? 'GET',
+    method: fetchOptions.method ?? "GET",
     headers,
   });
 
@@ -42,8 +46,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     return undefined as T;
   }
 
-  const contentType = response.headers.get('Content-Type');
-  const isJSON = contentType?.includes('application/json');
+  const contentType = response.headers.get("Content-Type");
+  const isJSON = contentType?.includes("application/json");
 
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
@@ -56,7 +60,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       }
     } else {
       try {
-        errorMessage = await response.text() || errorMessage;
+        errorMessage = (await response.text()) || errorMessage;
       } catch {
         // Ignore text parsing errors
       }
@@ -81,12 +85,12 @@ export interface ApiLocationPayload {
 
 export interface ApiWeightPayload {
   value: number;
-  unit: 'kg' | 'lbs';
+  unit: "kg" | "lbs";
 }
 
 export interface ApiVolumePayload {
   value: number;
-  unit: 'ml' | 'l' | 'oz' | 'cup' | 'cups' | 'fl_oz';
+  unit: "ml" | "l" | "oz" | "cup" | "cups" | "fl_oz";
 }
 
 export interface ApiUserResponse {
@@ -117,6 +121,7 @@ export interface ApiUserResponse {
   policiesAcceptedAt?: string | null;
   policiesCurrentVersion?: string;
   requiresPolicyAcceptance?: boolean;
+  archerHealthConnectionCode?: string | null;
   privacyAcceptedVersion?: string | null;
   privacyAcceptedAt?: string | null;
   privacyCurrentVersion?: string;
@@ -367,26 +372,31 @@ export const apiConfig = {
 };
 
 export async function createUser(payload: CreateUserPayload) {
-  return request<{ user: ApiUserResponse; drinks: ApiDrinkResponse[] }>(`/api/users/`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<{ user: ApiUserResponse; drinks: ApiDrinkResponse[] }>(
+    `/api/users/`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export async function getUser(userId: string) {
-  return request<{ user: ApiUserResponse; drinks: ApiDrinkResponse[] }>(`/api/users/${userId}`);
+  return request<{ user: ApiUserResponse; drinks: ApiDrinkResponse[] }>(
+    `/api/users/${userId}`
+  );
 }
 
 export async function updateUser(userId: string, payload: UpdateUserPayload) {
   return request<ApiUserResponse>(`/api/users/${userId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
 export async function deleteUserAccount(userId: string) {
   return request<{ message: string }>(`/api/users/${userId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -394,9 +404,12 @@ export async function exportUserData(userId: string) {
   return request<ApiUserDataExport>(`/api/users/${userId}/export`);
 }
 
-export async function importUserData(userId: string, payload: ImportUserDataPayload) {
+export async function importUserData(
+  userId: string,
+  payload: ImportUserDataPayload
+) {
   return request<ApiUserDataExport>(`/api/users/${userId}/import`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
@@ -407,105 +420,154 @@ export async function listDrinks(userId: string) {
 
 export async function createDrink(userId: string, payload: CreateDrinkPayload) {
   return request<ApiDrinkResponse>(`/api/users/${userId}/drinks`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function updateDrink(userId: string, drinkId: string, payload: UpdateDrinkPayload) {
+export async function updateDrink(
+  userId: string,
+  drinkId: string,
+  payload: UpdateDrinkPayload
+) {
   return request<ApiDrinkResponse>(`/api/users/${userId}/drinks/${drinkId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
 export async function deleteDrink(userId: string, drinkId: string) {
   return request<void>(`/api/users/${userId}/drinks/${drinkId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
-export async function logHydration(userId: string, payload: LogHydrationPayload) {
-  return request<ApiHydrationLogResponse>(`/api/users/${userId}/hydration/logs`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export async function logHydration(
+  userId: string,
+  payload: LogHydrationPayload
+) {
+  return request<ApiHydrationLogResponse>(
+    `/api/users/${userId}/hydration/logs`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export async function deleteHydrationLog(userId: string, logId: string) {
   return request<void>(`/api/users/${userId}/hydration/logs/${logId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
 // Weather API functions
-export async function getCurrentWeather(userId: string, lat: number, lon: number) {
-  return request<ApiWeatherResponse>(`/api/users/${userId}/weather/current?lat=${lat}&lon=${lon}`);
+export async function getCurrentWeather(
+  userId: string,
+  lat: number,
+  lon: number
+) {
+  return request<ApiWeatherResponse>(
+    `/api/users/${userId}/weather/current?lat=${lat}&lon=${lon}`
+  );
 }
 
-export async function saveWeatherData(userId: string, payload: CreateWeatherPayload) {
+export async function saveWeatherData(
+  userId: string,
+  payload: CreateWeatherPayload
+) {
   return request<ApiWeatherResponse>(`/api/users/${userId}/weather`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function getWeatherHistory(userId: string, limit?: number) {
-  const params = limit ? `?limit=${limit}` : '';
-  return request<ApiWeatherResponse[]>(`/api/users/${userId}/weather/history${params}`);
+  const params = limit ? `?limit=${limit}` : "";
+  return request<ApiWeatherResponse[]>(
+    `/api/users/${userId}/weather/history${params}`
+  );
 }
 
-export async function getDailySummary(userId: string, date: string, timezone: string) {
+export async function getDailySummary(
+  userId: string,
+  date: string,
+  timezone: string
+) {
   const params = new URLSearchParams({ date, timezone });
-  return request<ApiDailySummaryResponse>(`/api/users/${userId}/hydration/daily?${params.toString()}`);
+  return request<ApiDailySummaryResponse>(
+    `/api/users/${userId}/hydration/daily?${params.toString()}`
+  );
 }
 
-export async function getHydrationStats(userId: string, timezone: string, days = 7) {
+export async function getHydrationStats(
+  userId: string,
+  timezone: string,
+  days = 7
+) {
   const params = new URLSearchParams({ timezone, days: String(days) });
-  return request<ApiHydrationStatsResponse>(`/api/users/${userId}/hydration/stats?${params.toString()}`);
+  return request<ApiHydrationStatsResponse>(
+    `/api/users/${userId}/hydration/stats?${params.toString()}`
+  );
 }
 
 export async function getWeeklySummary(userId: string, timezone: string) {
-  const params = new URLSearchParams({ timezone, days: '7' });
-  return request<ApiDailySummaryResponse[]>(`/api/users/${userId}/hydration/weekly?${params.toString()}`);
+  const params = new URLSearchParams({ timezone, days: "7" });
+  return request<ApiDailySummaryResponse[]>(
+    `/api/users/${userId}/hydration/weekly?${params.toString()}`
+  );
 }
 
 export async function getAllTimeStats(userId: string, timezone: string) {
   const params = new URLSearchParams({ timezone });
-  return request<ApiHydrationStatsResponse>(`/api/users/${userId}/hydration/summary?${params.toString()}`);
+  return request<ApiHydrationStatsResponse>(
+    `/api/users/${userId}/hydration/summary?${params.toString()}`
+  );
 }
 
 export async function getDailyGoal(userId: string, date: string) {
   const params = new URLSearchParams({ date });
-  return request<{ goalMl: number }>(`/api/users/${userId}/hydration/goals/daily?${params.toString()}`);
+  return request<{ goalMl: number }>(
+    `/api/users/${userId}/hydration/goals/daily?${params.toString()}`
+  );
 }
 
-export async function setDailyGoal(userId: string, date: string, goalMl: number) {
-  return request<{ id: string; userId: string; date: string; goalMl: number }>(`/api/users/${userId}/hydration/goals/daily`, {
-    method: 'POST',
-    body: JSON.stringify({ date, goalMl }),
-  });
+export async function setDailyGoal(
+  userId: string,
+  date: string,
+  goalMl: number
+) {
+  return request<{ id: string; userId: string; date: string; goalMl: number }>(
+    `/api/users/${userId}/hydration/goals/daily`,
+    {
+      method: "POST",
+      body: JSON.stringify({ date, goalMl }),
+    }
+  );
 }
 
 export async function deleteDailyGoal(userId: string, date: string) {
   const params = new URLSearchParams({ date });
-  return request<void>(`/api/users/${userId}/hydration/goals/daily?${params.toString()}`, {
-    method: 'DELETE',
-  });
+  return request<void>(
+    `/api/users/${userId}/hydration/goals/daily?${params.toString()}`,
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 export function resolveDrinkLabel(type: DrinkType): string {
   const labels: Record<DrinkType, string> = {
-    water: 'Water',
-    sports_drink: 'Sports Drink',
-    milk: 'Milk',
-    tea: 'Tea',
-    juice: 'Juice',
-    coffee: 'Coffee',
-    soda: 'Soda',
-    energy_drink: 'Energy Drink',
-    alcohol: 'Alcohol',
-    custom: 'Custom Drink',
+    water: "Water",
+    sports_drink: "Sports Drink",
+    milk: "Milk",
+    tea: "Tea",
+    juice: "Juice",
+    coffee: "Coffee",
+    soda: "Soda",
+    energy_drink: "Energy Drink",
+    alcohol: "Alcohol",
+    custom: "Custom Drink",
   };
   return labels[type] ?? type;
 }
@@ -516,18 +578,23 @@ export function isApiEnabled(): boolean {
 
 export async function registerUser(payload: RegisterPayload) {
   return request<ApiAuthResponse>(`/api/auth/register`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
     skipAuth: true,
   });
 }
 
-export async function loginUser(payload: LoginPayload): Promise<ApiAuthResponse | ApiTwoFactorRequiredResponse> {
-  return request<ApiAuthResponse | ApiTwoFactorRequiredResponse>('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    skipAuth: true,
-  });
+export async function loginUser(
+  payload: LoginPayload
+): Promise<ApiAuthResponse | ApiTwoFactorRequiredResponse> {
+  return request<ApiAuthResponse | ApiTwoFactorRequiredResponse>(
+    "/api/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      skipAuth: true,
+    }
+  );
 }
 
 export async function getAuthState() {
@@ -536,55 +603,64 @@ export async function getAuthState() {
 
 export async function acceptPrivacy(version: string) {
   return request<ApiUserResponse>(`/api/auth/accept-privacy`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ version }),
   });
 }
 
 export async function acceptTerms(version: string) {
   return request<ApiUserResponse>(`/api/auth/accept-terms`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ version }),
   });
 }
 
-export async function getGoogleOAuthUrl(redirectUrl: string, skipAuth: boolean = false): Promise<string> {
+export async function getGoogleOAuthUrl(
+  redirectUrl: string,
+  skipAuth: boolean = false
+): Promise<string> {
   const params = new URLSearchParams();
   if (redirectUrl) {
-    params.set('redirect', redirectUrl);
+    params.set("redirect", redirectUrl);
   }
   const suffix = params.toString();
-  const response = await request<{ url: string }>(`/api/auth/google/login${suffix ? `?${params}` : ''}`, {
-    method: 'GET',
-    skipAuth,
-  });
+  const response = await request<{ url: string }>(
+    `/api/auth/google/login${suffix ? `?${params}` : ""}`,
+    {
+      method: "GET",
+      skipAuth,
+    }
+  );
   return response.url;
 }
 
 // Password Management
-export async function changePassword(userId: string, payload: ChangePasswordPayload) {
+export async function changePassword(
+  userId: string,
+  payload: ChangePasswordPayload
+) {
   return request<{ message: string }>(`/api/users/${userId}/change-password`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function setPassword(userId: string, payload: SetPasswordPayload) {
   return request<{ message: string }>(`/api/users/${userId}/set-password`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function removePassword(userId: string) {
   return request<{ message: string }>(`/api/users/${userId}/password`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
 export async function forgotPassword(payload: ForgotPasswordPayload) {
   return request<{ message: string }>(`/api/auth/forgot-password`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
     skipAuth: true,
   });
@@ -592,7 +668,7 @@ export async function forgotPassword(payload: ForgotPasswordPayload) {
 
 export async function resetPassword(payload: ResetPasswordPayload) {
   return request<{ message: string }>(`/api/auth/reset-password`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
     skipAuth: true,
   });
@@ -601,20 +677,23 @@ export async function resetPassword(payload: ResetPasswordPayload) {
 // Google Account Management
 export async function unlinkGoogle(userId: string) {
   return request<ApiUserResponse>(`/api/users/${userId}/unlink-google`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
 // Email Verification
 export async function sendEmailVerification(userId: string) {
-  return request<{ message: string; sent: boolean }>(`/api/users/${userId}/send-verification`, {
-    method: 'POST',
-  });
+  return request<{ message: string; sent: boolean }>(
+    `/api/users/${userId}/send-verification`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 export async function verifyEmail(payload: VerifyEmailPayload) {
   return request<{ message: string }>(`/api/auth/verify-email`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
     skipAuth: true,
   });
@@ -623,20 +702,20 @@ export async function verifyEmail(payload: VerifyEmailPayload) {
 // Two-Factor Authentication
 export async function enable2FA(userId: string) {
   return request<Enable2FAResponse>(`/api/users/${userId}/enable-2fa`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
 export async function verify2FA(userId: string, payload: Verify2FAPayload) {
   return request<{ message: string }>(`/api/users/${userId}/verify-2fa`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function disable2FA(userId: string, payload: Disable2FAPayload) {
   return request<{ message: string }>(`/api/users/${userId}/disable-2fa`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }
@@ -645,7 +724,7 @@ export async function disable2FA(userId: string, payload: Disable2FAPayload) {
 export async function checkHealth(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/healthz`, {
-      method: 'GET',
+      method: "GET",
     });
     return response.ok;
   } catch {

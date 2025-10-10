@@ -49,6 +49,8 @@ type User struct {
 	PrivacyAcceptedAt         *time.Time
 	TermsAcceptedVersion      *string `gorm:"size:64"`
 	TermsAcceptedAt           *time.Time
+	ArcherHealthUserID        *string `gorm:"size:255"`
+	ArcherHealthConnectionCode *string `gorm:"size:255"`
 	Drinks                    []Drink        `gorm:"constraint:OnDelete:CASCADE"`
 	HydrationLogs             []HydrationLog `gorm:"constraint:OnDelete:CASCADE"`
 }

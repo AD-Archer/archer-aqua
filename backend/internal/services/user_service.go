@@ -295,6 +295,21 @@ func (s *UserService) ImportUserData(ctx context.Context, userID uuid.UUID, payl
 	})
 }
 
+func (s *UserService) GetUserByArcherHealthConnectionCode(ctx context.Context, code string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("archer_health_connection_code = ?", code).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("user not found: %w", err)
+		}
+		return nil, fmt.Errorf("fetch user by connection code: %w", err)
+	}
+	return &user, nil
+}
+
+func (s *UserService) UpdateUserConnectionCode(ctx context.Context, userID uuid.UUID, code string) error {
+	return s.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", userID).Update("archer_health_connection_code", code).Error
+}
+
 func defaultString(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AD-Archer/archer-aqua/backend/internal/dto"
@@ -18,8 +19,24 @@ func (api *API) LogHydration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !api.authorizeUserRequest(w, r, userID) {
-		return
+	// Try connection code authentication first (for Archer Health)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		connectionCode := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Find user by connection code
+		user, err := api.users.GetUserByArcherHealthConnectionCode(r.Context(), connectionCode)
+		if err == nil && user != nil && user.ID == userID {
+			// Connection code auth successful
+		} else {
+			respondError(w, http.StatusUnauthorized, "invalid connection code")
+			return
+		}
+	} else {
+		// Fall back to JWT authentication
+		if !api.authorizeUserRequest(w, r, userID) {
+			return
+		}
 	}
 
 	var request dto.LogHydrationRequest
@@ -79,8 +96,24 @@ func (api *API) HydrationStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !api.authorizeUserRequest(w, r, userID) {
-		return
+	// Try connection code authentication first (for Archer Health)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		connectionCode := strings.TrimPrefix(authHeader, "Bearer ")
+		
+		// Find user by connection code
+		user, err := api.users.GetUserByArcherHealthConnectionCode(r.Context(), connectionCode)
+		if err == nil && user != nil && user.ID == userID {
+			// Connection code auth successful
+		} else {
+			respondError(w, http.StatusUnauthorized, "invalid connection code")
+			return
+		}
+	} else {
+		// Fall back to JWT authentication
+		if !api.authorizeUserRequest(w, r, userID) {
+			return
+		}
 	}
 
 	tz := r.URL.Query().Get("timezone")
@@ -185,8 +218,24 @@ func (api *API) GetDailyGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !api.authorizeUserRequest(w, r, userID) {
-		return
+	// Try connection code authentication first (for Archer Health)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		connectionCode := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Find user by connection code
+		user, err := api.users.GetUserByArcherHealthConnectionCode(r.Context(), connectionCode)
+		if err == nil && user != nil && user.ID == userID {
+			// Connection code auth successful
+		} else {
+			respondError(w, http.StatusUnauthorized, "invalid connection code")
+			return
+		}
+	} else {
+		// Fall back to JWT authentication
+		if !api.authorizeUserRequest(w, r, userID) {
+			return
+		}
 	}
 
 	dateStr := r.URL.Query().Get("date")

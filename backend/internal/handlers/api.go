@@ -14,9 +14,11 @@ type API struct {
 	auth       *services.AuthService
 	weather    *services.WeatherService
 	logger     *slog.Logger
+	// HealthAppURL is the configured URL for the Archer Health frontend/backend
+	HealthAppURL string
 }
 
-func NewAPI(userService *services.UserService, drinkService *services.DrinkService, hydrationService *services.HydrationService, dailyGoalService *services.DailyGoalService, authService *services.AuthService, weatherService *services.WeatherService, logger *slog.Logger) *API {
+func NewAPI(userService *services.UserService, drinkService *services.DrinkService, hydrationService *services.HydrationService, dailyGoalService *services.DailyGoalService, authService *services.AuthService, weatherService *services.WeatherService, logger *slog.Logger, healthAppURL string) *API {
 	return &API{
 		users:      userService,
 		drinks:     drinkService,
@@ -25,5 +27,6 @@ func NewAPI(userService *services.UserService, drinkService *services.DrinkServi
 		auth:       authService,
 		weather:    weatherService,
 		logger:     logger,
+		HealthAppURL: healthAppURL,
 	}
 }

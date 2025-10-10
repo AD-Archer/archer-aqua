@@ -23,6 +23,7 @@ type Config struct {
 	JWTIssuer                 string
 	JWTExpiry                 time.Duration
 	FrontendURL               string
+	HealthAppURL              string
 	GoogleClientID            string
 	GoogleClientSecret        string
 	GoogleRedirectURL         string
@@ -71,10 +72,57 @@ func Load() (Config, error) {
 	}
 
 	frontendURL := valueOrDefault("FRONTEND_URL", "http://localhost:5173")
+	healthAppURL := strings.TrimSpace(os.Getenv("HEALTH_APP_URL"))
+	// If a HEALTH_APP_URL isn't provided, allow using the Vite env variable (convenience for local dev)
+	if healthAppURL == "" {
+		healthAppURL = strings.TrimSpace(os.Getenv("VITE_ARCHER_HEALTH_URL"))
+	}
+	// As a last resort for local dev, attempt to read ../.env and parse the value directly
+	if healthAppURL == "" {
+		if data, err := os.ReadFile("../.env"); err == nil {
+			lines := strings.Split(string(data), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				key := strings.TrimSpace(parts[0])
+				val := strings.TrimSpace(parts[1])
+				// remove optional surrounding quotes
+				val = strings.Trim(val, "\"'")
+				if key == "HEALTH_APP_URL" || key == "VITE_ARCHER_HEALTH_URL" {
+					healthAppURL = val
+					break
+				}
+			}
+		}
+	}
+	if healthAppURL == "" {
+		// Provide a sensible default so deployments that don't set the env still allow the public health host
+		healthAppURL = "https://health.adarcher.app"
+	}
 
 	allowedOrigins := []string{frontendURL}
 	if rawOrigins := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS")); rawOrigins != "" {
 		allowedOrigins = splitAndClean(rawOrigins)
+	}
+
+	// If a health app URL is provided, include it in allowed origins (avoid duplicates)
+	if healthAppURL != "" {
+		found := false
+		for _, o := range allowedOrigins {
+			if o == healthAppURL {
+				found = true
+				break
+			}
+		}
+		if !found {
+			allowedOrigins = append(allowedOrigins, healthAppURL)
+		}
 	}
 
 	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
@@ -121,6 +169,7 @@ func Load() (Config, error) {
 		JWTIssuer:                 jwtIssuer,
 		JWTExpiry:                 jwtExpiry,
 		FrontendURL:               frontendURL,
+        HealthAppURL:              healthAppURL,
 		GoogleClientID:            googleClientID,
 		GoogleClientSecret:        googleClientSecret,
 		GoogleRedirectURL:         googleRedirectURL,
