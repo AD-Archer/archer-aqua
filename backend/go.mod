@@ -1,6 +1,6 @@
 module github.com/AD-Archer/archer-aqua/backend
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.3
@@ -10,8 +10,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/pquerna/otp v1.5.0
-	golang.org/x/crypto v0.31.0
-	golang.org/x/oauth2 v0.23.0
+	golang.org/x/crypto v0.45.0
+	golang.org/x/oauth2 v0.27.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.0
@@ -30,8 +30,8 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 )
